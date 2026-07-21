@@ -1,0 +1,3 @@
+- in @internal/service/start.go there is that Todo, implement it; 
+- now, create one router implementation for the GET "/" which you store in the router.go file, its definition only
+- the actual implementation of the GET "/" you put in internal/controller/get_root.go and have it return something "this is journal backend"
