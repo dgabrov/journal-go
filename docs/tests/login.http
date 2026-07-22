@@ -1,0 +1,107 @@
+### login
+POST http://localhost:3001/servr/login
+Content-Type: application/json
+
+{
+  "login": "test1",
+  "password": "test1"
+}
+
+### add journal
+POST http://localhost:3001/servr/addJournal
+Content-Type: application/json
+
+{
+  "id": "journal2",
+  "title": "the second journal 2"
+}
+
+### remove journal
+POST http://localhost:3001/servr/removeJournals
+Content-Type: application/json
+
+{
+  "ids": ["journal2"]
+}
+
+### add journal
+POST http://localhost:3001/servr/logout
+
+### update journal
+POST http://localhost:3001/servr/updateJournal
+Content-Type: application/json
+
+{
+  "id": "journal1",
+  "title": "another title for 32"
+}
+### search users
+POST http://localhost:3001/servr/searchUsers
+Content-Type: application/json
+
+{
+  "search": "*"
+}
+### add reading users
+POST http://localhost:3001/servr/addReadingUsers
+Content-Type: application/json
+
+{
+  "journalId": "journal1",
+  "userIds": ["019f8b3f-8f31-7f02-8c83-e8c80c9ef3b5"]
+}
+### list reading users
+POST http://localhost:3001/servr/readingUsers
+Content-Type: application/json
+
+{
+  "val": "journal1"
+}
+
+### remove reading
+POST http://localhost:3001/servr/removeReading
+Content-Type: application/json
+
+{
+  "journalId": "journal1",
+  "userIds": ["019f8b3f-8f31-7f02-8c83-e8c80c9ef3b5"]
+}
+
+### add journal item
+POST http://localhost:3001/servr/addJournalItem
+Content-Type: application/json
+
+{
+  "id": "item3",
+  "journalID": "journal1",
+  "date": "jan 25",
+  "comments": "item three"
+}
+
+### edit journal item
+POST http://localhost:3001/servr/editJournalItem
+Content-Type: application/json
+
+{
+  "id": "item3",
+  "journalID": "journal1",
+  "date": "jan 25",
+  "comments": "changed for third item"
+}
+
+### journal items
+POST http://localhost:3001/servr/journalItems
+Content-Type: application/json
+
+{
+  "val": "journal1"
+}
+
+### remove items
+POST http://localhost:3001/servr/removeItems
+Content-Type: application/json
+
+{
+  "ids": ["item2", "item3"]
+}
+

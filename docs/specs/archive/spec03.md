@@ -1,0 +1,2 @@
+- please change handlefunc with handle and for each endpoint you create a structure that is initialized wiht the database and config data and then you use this to expose the handler
+- look better you did not use the config data context to setup the endpoint so when you finish the previous point you do this as well

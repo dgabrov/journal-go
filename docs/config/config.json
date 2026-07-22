@@ -1,0 +1,13 @@
+{
+  "auth": "https://cbox.info/abax/loginNoToken",
+  "tokenTimeToLive": 3600,
+  "access": "journal",
+  "db": {
+    "machine": "localhost",
+    "username": "jou",
+    "password": "jou",
+    "database": "journal"
+  },
+  "serverAddress": "0.0.0.0:3001",
+  "context": "/servr"
+}

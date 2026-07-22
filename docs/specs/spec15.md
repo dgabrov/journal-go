@@ -1,0 +1,2 @@
+- create empty POST controller with the url suffix (after context) /postEditJournalItem
+- payload is JournalItem

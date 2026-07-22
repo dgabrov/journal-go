@@ -1,0 +1,7 @@
+POST https://cbox.info/abax/loginNoToken
+Content-Type: application/json
+
+{
+  "login": "test1",
+  "password": "test1asdf3"
+}
