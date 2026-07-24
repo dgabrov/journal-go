@@ -67,3 +67,5 @@ create table user_journal
         foreign key (user_id) references user (user_id)
 );
 
+INSERT INTO journal.relation (relation_cd, name) VALUES ('owner', 'Journal owner');
+INSERT INTO journal.relation (relation_cd, name) VALUES ('read', 'Read access');
