@@ -31,7 +31,10 @@ create table user
         primary key,
     provided_id varchar(128) not null,
     name        varchar(128) not null,
-    login       varchar(128) not null
+    login       varchar(128) not null,
+    created_dt  datetime     not null,
+    constraint uq_provided_id
+        unique (provided_id) comment 'one entry for provided id'
 );
 
 create table session
@@ -40,7 +43,7 @@ create table session
         primary key,
     user_id     varchar(64)            not null,
     expired_ind varchar(1) default 'N' not null,
-    expire_dt   datetime               null,
+    expire_dt   datetime               not null,
     token       varchar(64)            not null,
     constraint fk_session_user
         foreign key (user_id) references user (user_id)
