@@ -106,6 +106,11 @@ func (h *PostUploadFilesHandler) processValidFile(ctx context.Context, file io.R
 	attachmentID := uuid.Must(uuid.NewV7()).String()
 	filename := attachmentID + ".dat"
 
+	contentType, err := getImageContentType(file)
+	if err != nil {
+		return "", err
+	}
+
 	finalPath := filepath.Join(h.Config.Files.RegularFolder, filename)
 	finalFile, err := os.Create(finalPath)
 	if err != nil {
@@ -118,7 +123,7 @@ func (h *PostUploadFilesHandler) processValidFile(ctx context.Context, file io.R
 		return "", err
 	}
 
-	err = servr.CreateAttachment(ctx, journalItemID, attachmentID, filename)
+	err = servr.CreateAttachment(ctx, journalItemID, attachmentID, filename, contentType)
 	if err != nil {
 		os.Remove(finalPath)
 		return "", err
@@ -248,6 +253,33 @@ func getImageExtension(filePath string) (string, error) {
 	}
 	if isPNG {
 		return ".png", nil
+	}
+
+	return "", errors.New("unknown image type")
+}
+
+func getImageContentType(file io.ReadSeeker) (string, error) {
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", err
+	}
+
+	header := make([]byte, 12)
+	if _, err := file.Read(header); err != nil {
+		return "", err
+	}
+
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", err
+	}
+
+	isJPEG := len(header) >= 2 && header[0] == 0xFF && header[1] == 0xD8
+	isPNG := len(header) >= 8 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
+
+	if isJPEG {
+		return "image/jpeg", nil
+	}
+	if isPNG {
+		return "image/png", nil
 	}
 
 	return "", errors.New("unknown image type")
