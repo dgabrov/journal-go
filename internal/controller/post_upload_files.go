@@ -4,13 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"image"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/amanagement24/journal-go/internal/data"
 	"github.com/amanagement24/journal-go/internal/server"
+	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 )
 
@@ -92,6 +95,8 @@ func (h *PostUploadFilesHandler) process(ctx context.Context, r *http.Request, j
 		}
 	}
 
+	go h.processThumbnails(attachmentIDs)
+
 	return &data.IdsHolder{Ids: attachmentIDs}, nil
 }
 
@@ -99,30 +104,15 @@ func (h *PostUploadFilesHandler) processValidFile(ctx context.Context, file io.R
 	guid := uuid.Must(uuid.NewV7()).String()
 	filename := guid + ".dat"
 
-	if err := os.MkdirAll(h.Config.Files.TempFolder, 0755); err != nil {
-		return "", err
-	}
-
-	tempPath := filepath.Join(h.Config.Files.TempFolder, filename)
-	tempFile, err := os.Create(tempPath)
+	finalPath := filepath.Join(h.Config.Files.RegularFolder, filename)
+	finalFile, err := os.Create(finalPath)
 	if err != nil {
 		return "", err
 	}
-	defer tempFile.Close()
+	defer finalFile.Close()
 
-	if _, err := io.Copy(tempFile, file); err != nil {
-		os.Remove(tempPath)
-		return "", err
-	}
-
-	if err := os.MkdirAll(h.Config.Files.RegularFolder, 0755); err != nil {
-		os.Remove(tempPath)
-		return "", err
-	}
-
-	finalPath := filepath.Join(h.Config.Files.RegularFolder, filename)
-	if err := os.Rename(tempPath, finalPath); err != nil {
-		os.Remove(tempPath)
+	if _, err := io.Copy(finalFile, file); err != nil {
+		os.Remove(finalPath)
 		return "", err
 	}
 
@@ -153,4 +143,43 @@ func isValidImageFile(file io.ReadSeeker) bool {
 	isPNG := len(header) >= 8 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
 
 	return isJPEG || isPNG
+}
+
+func (h *PostUploadFilesHandler) processThumbnails(attachmentIDs []string) {
+	for _, id := range attachmentIDs {
+		h.createThumbnail(id)
+	}
+}
+
+func (h *PostUploadFilesHandler) createThumbnail(id string) {
+	filename := id + ".dat"
+	sourcePath := filepath.Join(h.Config.Files.RegularFolder, filename)
+
+	img, err := imaging.Open(sourcePath)
+	if err != nil {
+		slog.Error("failed to open image for thumbnail", "id", id, "error", err)
+		return
+	}
+
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	maxDimension := h.Config.Files.Dimension
+
+	if width <= maxDimension && height <= maxDimension {
+		return
+	}
+
+	var scaledImg image.Image
+	if width > height {
+		scaledImg = imaging.Resize(img, maxDimension, 0, imaging.Lanczos)
+	} else {
+		scaledImg = imaging.Resize(img, 0, maxDimension, imaging.Lanczos)
+	}
+
+	destPath := filepath.Join(h.Config.Files.SmallFolder, filename)
+	if err := imaging.Save(scaledImg, destPath); err != nil {
+		slog.Error("failed to save thumbnail", "id", id, "error", err)
+		return
+	}
 }

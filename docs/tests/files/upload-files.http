@@ -5,7 +5,7 @@ Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0g
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
 Content-Disposition: form-data; name="journalItemId"
 
-019f9536-4a2a-7167-8eff-b099064a677b
+019f91d7-9417-7272-b559-0abf8ef43d77
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
 Content-Disposition: form-data; name="files"; filename="test-image.jpg"
 Content-Type: image/jpeg
@@ -16,51 +16,6 @@ Content-Disposition: form-data; name="files"; filename="test-image.png"
 Content-Type: image/png
 
 < ./test-image.png
-------WebKitFormBoundary7MA4YWxkTrZu0gW
-Content-Disposition: form-data; name="files"; filename="test-file.txt"
-Content-Type: text/plain
-
-< ./test-file.txt
-------WebKitFormBoundary7MA4YWxkTrZu0gW--
-
-### Upload JPEG Only
-POST http://localhost:3001/journalserv/uploadFiles
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
-
-------WebKitFormBoundary7MA4YWxkTrZu0gW
-Content-Disposition: form-data; name="journalItemId"
-
-{{journalItemId}}
-------WebKitFormBoundary7MA4YWxkTrZu0gW
-Content-Disposition: form-data; name="files"; filename="test-image.jpg"
-Content-Type: image/jpeg
-
-< ./test-image.jpg
-------WebKitFormBoundary7MA4YWxkTrZu0gW--
-
-### Upload PNG Only
-POST http://localhost:3001/journalserv/uploadFiles
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
-
-------WebKitFormBoundary7MA4YWxkTrZu0gW
-Content-Disposition: form-data; name="journalItemId"
-
-019f9536-4a2a-7167-8eff-b099064a677b
-------WebKitFormBoundary7MA4YWxkTrZu0gW
-Content-Disposition: form-data; name="files"; filename="test-image.png"
-Content-Type: image/png
-
-< ./test-image.png
-------WebKitFormBoundary7MA4YWxkTrZu0gW--
-
-### Upload Invalid File Only (should be rejected)
-POST http://localhost:3001/journalserv/uploadFiles
-Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
-
-------WebKitFormBoundary7MA4YWxkTrZu0gW
-Content-Disposition: form-data; name="journalItemId"
-
-019f9536-4a2a-7167-8eff-b099064a677b
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
 Content-Disposition: form-data; name="files"; filename="test-file.txt"
 Content-Type: text/plain
