@@ -105,3 +105,6 @@ Content-Type: application/json
   "ids": ["item2", "item3"]
 }
 
+### get image
+GET http://localhost:3001/journalserv/getFile?id=019f9630-e80e-7769-a022-066b843fed3a&small=1
+

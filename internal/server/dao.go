@@ -468,3 +468,29 @@ func (s Server) updateJournalTitle(ctx context.Context, tx *sql.Tx, journalID st
 	)
 	return err
 }
+
+func (s Server) ValidateAttachmentAccess(ctx context.Context, userID string, attachmentID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var count int
+	err = tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM attachment a
+		JOIN journal_item ji ON a.journal_item_id = ji.journal_item_id
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE a.attachment_id = ?
+		AND uj.user_id = ?
+	`, attachmentID, userID).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("attachment not found or user does not have access")
+	}
+
+	return tx.Commit()
+}
