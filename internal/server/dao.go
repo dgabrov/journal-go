@@ -173,6 +173,34 @@ func (s Server) validateItemsOwnership(ctx context.Context, tx *sql.Tx, userID s
 	return nil
 }
 
+func (s Server) ValidateJournalItemOwnership(ctx context.Context, userID string, journalItemID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `
+		SELECT COUNT(*) FROM journal_item ji
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE ji.journal_item_id = ?
+		AND uj.user_id = ?
+		AND uj.relation_cd = ?
+	`
+
+	var count int
+	err = tx.QueryRowContext(ctx, query, journalItemID, userID, data.RelationOwner).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("user does not own this journal item")
+	}
+
+	return tx.Commit()
+}
+
 func (s Server) deleteItems(ctx context.Context, tx *sql.Tx, itemIDs []string) error {
 	if len(itemIDs) == 0 {
 		return nil

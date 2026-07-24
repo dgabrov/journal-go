@@ -26,6 +26,7 @@ func SetupRouter(config *data.ConfigData, db *sql.DB) *http.ServeMux {
 	mux.Handle(fullUrl(false, context, "/addReadingUsers"), controller.NewPostAddReadingHandler(config, db))
 	mux.Handle(fullUrl(false, context, "/addJournal"), controller.NewPostAddJournalHandler(config, db))
 	mux.Handle(fullUrl(false, context, "/updateJournal"), controller.NewPostUpdateJournalHandler(config, db))
+	mux.Handle(fullUrl(false, context, "/uploadFiles"), controller.NewPostUploadFilesHandler(config, db))
 
 	return mux
 }
