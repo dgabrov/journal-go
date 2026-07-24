@@ -9,5 +9,11 @@
     "database": "journal"
   },
   "serverAddress": "0.0.0.0:3001",
-  "context": "/journalserv"
+  "context": "/journalserv",
+  "files": {
+    "smallFolder": "",
+    "regularFolder": "",
+    "tempFolder": "",
+    "dimension": 150
+  }
 }
