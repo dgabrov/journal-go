@@ -17,8 +17,4 @@ Content-Type: image/png
 
 < ./test-image.png
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
-Content-Disposition: form-data; name="files"; filename="test-file.txt"
-Content-Type: text/plain
 
-< ./test-file.txt
-------WebKitFormBoundary7MA4YWxkTrZu0gW--

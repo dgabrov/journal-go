@@ -3,18 +3,15 @@ package server
 import (
 	"context"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-func (s Server) CreateAttachment(ctx context.Context, journalItemID string, filename string) (string, error) {
+func (s Server) CreateAttachment(ctx context.Context, journalItemID string, attachmentID string, filename string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer tx.Rollback()
 
-	attachmentID := uuid.Must(uuid.NewV7()).String()
 	now := time.Now()
 
 	_, err = tx.ExecContext(ctx,
@@ -22,8 +19,8 @@ func (s Server) CreateAttachment(ctx context.Context, journalItemID string, file
 		attachmentID, journalItemID, filename, now, now,
 	)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return attachmentID, tx.Commit()
+	return tx.Commit()
 }

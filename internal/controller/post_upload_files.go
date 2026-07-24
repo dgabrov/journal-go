@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"log/slog"
 	"net/http"
@@ -101,8 +103,8 @@ func (h *PostUploadFilesHandler) process(ctx context.Context, r *http.Request, j
 }
 
 func (h *PostUploadFilesHandler) processValidFile(ctx context.Context, file io.ReadSeeker, journalItemID string, servr *server.Server) (string, error) {
-	guid := uuid.Must(uuid.NewV7()).String()
-	filename := guid + ".dat"
+	attachmentID := uuid.Must(uuid.NewV7()).String()
+	filename := attachmentID + ".dat"
 
 	finalPath := filepath.Join(h.Config.Files.RegularFolder, filename)
 	finalFile, err := os.Create(finalPath)
@@ -116,7 +118,7 @@ func (h *PostUploadFilesHandler) processValidFile(ctx context.Context, file io.R
 		return "", err
 	}
 
-	attachmentID, err := servr.CreateAttachment(ctx, journalItemID, filename)
+	err = servr.CreateAttachment(ctx, journalItemID, attachmentID, filename)
 	if err != nil {
 		os.Remove(finalPath)
 		return "", err
@@ -153,7 +155,14 @@ func (h *PostUploadFilesHandler) processThumbnails(attachmentIDs []string) {
 
 func (h *PostUploadFilesHandler) createThumbnail(id string) {
 	filename := id + ".dat"
+	slog.Info("starting processing thumbnail", slog.String("id", id))
 	sourcePath := filepath.Join(h.Config.Files.RegularFolder, filename)
+
+	ext, err := getImageExtension(sourcePath)
+	if err != nil {
+		slog.Error("failed to detect image extension", "id", id, "error", err)
+		return
+	}
 
 	img, err := imaging.Open(sourcePath)
 	if err != nil {
@@ -161,12 +170,37 @@ func (h *PostUploadFilesHandler) createThumbnail(id string) {
 		return
 	}
 
+	slog.Info("opened source path for thumbnail processing")
+
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
 	maxDimension := h.Config.Files.Dimension
 
+	destPath := filepath.Join(h.Config.Files.SmallFolder, filename)
+	_ = os.Remove(destPath)
+
 	if width <= maxDimension && height <= maxDimension {
+		sourceFile, err := os.Open(sourcePath)
+		if err != nil {
+			slog.Error("failed to open source file for copying", "id", id, "error", err)
+			return
+		}
+		defer sourceFile.Close()
+
+		destFile, err := os.Create(destPath)
+		if err != nil {
+			slog.Error("failed to create destination file", "id", id, "error", err)
+			return
+		}
+		defer destFile.Close()
+
+		if _, err := io.Copy(destFile, sourceFile); err != nil {
+			slog.Error("failed to copy file to small folder", "id", id, "error", err)
+			return
+		}
+
+		slog.Info("thumbnail copied (no resizing needed)", "id", id)
 		return
 	}
 
@@ -177,9 +211,44 @@ func (h *PostUploadFilesHandler) createThumbnail(id string) {
 		scaledImg = imaging.Resize(img, 0, maxDimension, imaging.Lanczos)
 	}
 
-	destPath := filepath.Join(h.Config.Files.SmallFolder, filename)
-	if err := imaging.Save(scaledImg, destPath); err != nil {
+	slog.Info("thumbnail resizing complete")
+
+	tempPath := filepath.Join(h.Config.Files.SmallFolder, id+ext)
+	if err := imaging.Save(scaledImg, tempPath); err != nil {
 		slog.Error("failed to save thumbnail", "id", id, "error", err)
 		return
 	}
+
+	if err := os.Rename(tempPath, destPath); err != nil {
+		slog.Error("failed to rename thumbnail to .dat", "id", id, "error", err)
+		os.Remove(tempPath)
+		return
+	}
+
+	slog.Info("thumbnail created", "id", id)
+}
+
+func getImageExtension(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	header := make([]byte, 12)
+	if _, err := file.Read(header); err != nil {
+		return "", err
+	}
+
+	isJPEG := len(header) >= 2 && header[0] == 0xFF && header[1] == 0xD8
+	isPNG := len(header) >= 8 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
+
+	if isJPEG {
+		return ".jpg", nil
+	}
+	if isPNG {
+		return ".png", nil
+	}
+
+	return "", errors.New("unknown image type")
 }
