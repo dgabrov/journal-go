@@ -18,6 +18,18 @@ create table journal_item
         foreign key (journal_id) references journal (journal_id)
 );
 
+create table attachment
+(
+    attachment_id   varchar(64)                              not null
+        primary key,
+    journal_item_id varchar(64)                              not null,
+    title           varchar(255) default ''                  not null,
+    created_dt      datetime     default current_timestamp() not null,
+    updated_dt      datetime     default current_timestamp() not null,
+    constraint fk_picture_item
+        foreign key (journal_item_id) references journal_item (journal_item_id)
+);
+
 create table relation
 (
     relation_cd varchar(64)  not null
@@ -67,5 +79,7 @@ create table user_journal
         foreign key (user_id) references user (user_id)
 );
 
-INSERT INTO journal.relation (relation_cd, name) VALUES ('owner', 'Journal owner');
-INSERT INTO journal.relation (relation_cd, name) VALUES ('read', 'Read access');
+
+INSERT INTO relation (relation_cd, name) VALUES ('owner', 'Journal owner');
+INSERT INTO relation (relation_cd, name) VALUES ('read', 'Read access');
+
