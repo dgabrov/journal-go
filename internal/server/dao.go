@@ -60,7 +60,7 @@ func (s Server) getLoginResponse(ctx context.Context, tx *sql.Tx, userID string)
 	}
 	defer rows.Close()
 
-	var journals []data.CompleteJournal
+	journals := make([]data.CompleteJournal, 0)
 	for rows.Next() {
 		var cj data.CompleteJournal
 		var isOwner int

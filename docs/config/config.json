@@ -11,9 +11,9 @@
   "serverAddress": "0.0.0.0:3001",
   "context": "/journalserv",
   "files": {
-    "smallFolder": "",
-    "regularFolder": "",
-    "tempFolder": "",
+    "smallFolder": "/Users/dgabrov/IdeaProjects/journal-go/docs/files/small",
+    "regularFolder": "/Users/dgabrov/IdeaProjects/journal-go/docs/files/regular",
+    "tempFolder": "/Users/dgabrov/IdeaProjects/journal-go/docs/files/temp",
     "dimension": 150
   }
 }
