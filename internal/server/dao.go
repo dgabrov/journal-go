@@ -118,7 +118,7 @@ func (s Server) searchUsers(ctx context.Context, tx *sql.Tx, userID string, sear
 	}
 	defer rows.Close()
 
-	var users []data.User
+	var users = make([]data.User, 0)
 	for rows.Next() {
 		var user data.User
 		err := rows.Scan(&user.Id, &user.Login, &user.FullName, &user.ProvidedId)
@@ -282,7 +282,7 @@ func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID 
 	}
 	defer rows.Close()
 
-	var items []data.JournalItem
+	var items = make([]data.JournalItem, 0)
 	for rows.Next() {
 		var item data.JournalItem
 		var dt time.Time
@@ -338,7 +338,7 @@ func (s Server) getReadingUsers(ctx context.Context, tx *sql.Tx, journalID strin
 	}
 	defer rows.Close()
 
-	var users []data.User
+	var users []data.User = make([]data.User, 0)
 	for rows.Next() {
 		var user data.User
 		err := rows.Scan(&user.Id, &user.Login, &user.FullName, &user.ProvidedId)

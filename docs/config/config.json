@@ -9,5 +9,5 @@
     "database": "journal"
   },
   "serverAddress": "0.0.0.0:3001",
-  "context": "/servr"
+  "context": "/journalserv"
 }
