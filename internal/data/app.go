@@ -58,6 +58,15 @@ type IdsHolder struct {
 	Ids []string `json:"ids"`
 }
 
+type TitleHolder struct {
+	AttachmentID string `json:"attachmentId"`
+	Title        string `json:"title"`
+}
+
+type Titles struct {
+	Titles []TitleHolder `json:"titles"`
+}
+
 type StringHolder struct {
 	Val string `json:"val"`
 }

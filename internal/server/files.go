@@ -124,3 +124,64 @@ func (s Server) deleteAttachmentFile(folderPath string, id string, filename stri
 	}
 	return nil
 }
+
+func (s Server) ValidateAttachmentOwnership(ctx context.Context, userID string, titleHolders []data.TitleHolder) error {
+	if len(titleHolders) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	attachmentIDs := make([]any, len(titleHolders))
+	for i, th := range titleHolders {
+		attachmentIDs[i] = th.AttachmentID
+	}
+
+	placeholders := strings.Repeat("?,", len(titleHolders)-1) + "?"
+	query := `
+		SELECT COUNT(*) FROM attachment a
+		JOIN journal_item ji ON a.journal_item_id = ji.journal_item_id
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE a.attachment_id IN (` + placeholders + `)
+		AND uj.user_id = ?
+		AND uj.relation_cd = ?
+	`
+	attachmentIDs = append(attachmentIDs, userID, data.RelationOwner)
+
+	var count int
+	err = tx.QueryRowContext(ctx, query, attachmentIDs...).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count != len(titleHolders) {
+		return errors.New("some attachments do not belong to journals owned by the user")
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) UpdateAttachmentTitles(ctx context.Context, titleHolders []data.TitleHolder) error {
+	if len(titleHolders) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, th := range titleHolders {
+		_, err := tx.ExecContext(ctx, "UPDATE attachment SET title = ? WHERE attachment_id = ?", th.Title, th.AttachmentID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
