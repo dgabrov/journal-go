@@ -102,11 +102,7 @@ func (h *PostUpdateAttachmentHandler) updateAttachmentFile(ctx context.Context, 
 		return err
 	}
 
-	// Delete old files
-	filename := attachmentID + ".dat"
-	_ = deleteAttachmentFileFromFolder(h.Config.Files.SmallFolder, filename, attachmentID)
-
-	// Create new thumbnail
+	// Create new thumbnail (old files are cleaned up by createThumbnail)
 	createThumbnail(attachmentID, h.Config.Files.RegularFolder, h.Config.Files.Dimension, h.Config.Files.SmallFolder)
 
 	// Update content type in database

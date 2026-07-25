@@ -202,17 +202,6 @@ func saveAttachmentFile(file io.ReadSeeker, attachmentID string, regularFolder s
 	return contentType, nil
 }
 
-func deleteAttachmentFileFromFolder(folderPath string, filename string, attachmentID string) error {
-	filePath := filepath.Join(folderPath, filename)
-	if err := os.Remove(filePath); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			slog.Error("failed to delete attachment file", "id", attachmentID, "path", filePath, "error", err)
-			return err
-		}
-	}
-	return nil
-}
-
 func createThumbnail(id string, regularFolder string, dimension int, smallFolder string) {
 	filename := id + ".dat"
 	slog.Info("starting processing thumbnail", slog.String("id", id))
