@@ -52,7 +52,12 @@ func (h *PostUpdateTitlesHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *PostUpdateTitlesHandler) process(ctx context.Context, userID string, titleHolders []data.TitleHolder, servr *server.Server) error {
-	if err := servr.ValidateAttachmentOwnership(ctx, userID, titleHolders); err != nil {
+	attachmentIDs := make([]string, len(titleHolders))
+	for i, th := range titleHolders {
+		attachmentIDs[i] = th.AttachmentID
+	}
+
+	if err := servr.ValidateAttachmentsOwnership(ctx, userID, attachmentIDs); err != nil {
 		return err
 	}
 

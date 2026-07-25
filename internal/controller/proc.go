@@ -179,6 +179,40 @@ func getImageContentType(file io.ReadSeeker) (string, error) {
 	return "image/png", nil
 }
 
+func saveAttachmentFile(file io.ReadSeeker, attachmentID string, regularFolder string) (string, error) {
+	contentType, err := getImageContentType(file)
+	if err != nil {
+		return "", err
+	}
+
+	filename := attachmentID + ".dat"
+	filePath := filepath.Join(regularFolder, filename)
+
+	dest, err := os.Create(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer dest.Close()
+
+	if _, err := io.Copy(dest, file); err != nil {
+		os.Remove(filePath)
+		return "", err
+	}
+
+	return contentType, nil
+}
+
+func deleteAttachmentFileFromFolder(folderPath string, filename string, attachmentID string) error {
+	filePath := filepath.Join(folderPath, filename)
+	if err := os.Remove(filePath); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			slog.Error("failed to delete attachment file", "id", attachmentID, "path", filePath, "error", err)
+			return err
+		}
+	}
+	return nil
+}
+
 func createThumbnail(id string, regularFolder string, dimension int, smallFolder string) {
 	filename := id + ".dat"
 	slog.Info("starting processing thumbnail", slog.String("id", id))
