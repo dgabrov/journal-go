@@ -54,7 +54,7 @@ func (h *PostUpdateAttachmentHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if err := servr.ValidateAttachmentOwnership(ctx, userID, attachmentID); err != nil {
+	if err := servr.ValidateAttachmentsOwnership(ctx, userID, []string{attachmentID}); err != nil {
 		writeJsonResponse(w, nil, err)
 		return
 	}

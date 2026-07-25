@@ -494,30 +494,3 @@ func (s Server) ValidateAttachmentAccess(ctx context.Context, userID string, att
 
 	return tx.Commit()
 }
-
-func (s Server) ValidateAttachmentOwnership(ctx context.Context, userID string, attachmentID string) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var count int
-	err = tx.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM attachment a
-		JOIN journal_item ji ON a.journal_item_id = ji.journal_item_id
-		JOIN user_journal uj ON ji.journal_id = uj.journal_id
-		WHERE a.attachment_id = ?
-		AND uj.user_id = ?
-		AND uj.relation_cd = ?
-	`, attachmentID, userID, data.RelationOwner).Scan(&count)
-	if err != nil {
-		return err
-	}
-
-	if count == 0 {
-		return errors.New("attachment not found or user is not the owner")
-	}
-
-	return tx.Commit()
-}
