@@ -39,6 +39,19 @@ type JournalItem struct {
 	LastUpdated time.Time `json:"lastUpdated"`
 }
 
+type Attachment struct {
+	Id    string `json:"id"`
+	Title string `json:"title"`
+}
+type CompleteJournalItem struct {
+	Id          string       `json:"id"`
+	JournalID   string       `json:"journalId"`
+	Date        string       `json:"date"`
+	Comments    string       `json:"comments"`
+	LastUpdated time.Time    `json:"lastUpdated"`
+	Attachments []Attachment `json:"attachments"`
+}
+
 type CompleteJournal struct {
 	Journal Journal `json:"journal"`
 	Owner   bool    `json:"owner"`

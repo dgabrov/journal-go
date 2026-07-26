@@ -298,33 +298,64 @@ func (s Server) validateJournalAccess(ctx context.Context, tx *sql.Tx, userID st
 	return nil
 }
 
-func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID string) ([]data.JournalItem, error) {
+func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID string) ([]data.CompleteJournalItem, error) {
 	rows, err := tx.QueryContext(ctx, `
-		SELECT journal_item_id, journal_id, created_dt, updated_dt, comments
-		FROM journal_item
-		WHERE journal_id = ?
-		ORDER BY created_dt DESC
+		SELECT ji.journal_item_id, ji.journal_id, ji.created_dt, ji.updated_dt, ji.comments,
+		       a.attachment_id, a.title
+		FROM journal_item ji
+		LEFT JOIN attachment a ON ji.journal_item_id = a.journal_item_id
+		WHERE ji.journal_id = ?
+		ORDER BY ji.created_dt DESC, a.attachment_id
 	`, journalID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var items = make([]data.JournalItem, 0)
+	itemMap := make(map[string]*data.CompleteJournalItem)
+	itemOrder := make([]string, 0)
+
 	for rows.Next() {
-		var item data.JournalItem
+		var itemID string
+		var journalID string
 		var dt time.Time
-		err := rows.Scan(&item.Id, &item.JournalID, &dt, &item.LastUpdated, &item.Comments)
+		var lastUpdated time.Time
+		var comments string
+		var attachmentID *string
+		var attachmentTitle *string
+
+		err := rows.Scan(&itemID, &journalID, &dt, &lastUpdated, &comments, &attachmentID, &attachmentTitle)
 		if err != nil {
 			return nil, err
 		}
 
-		item.Date = formatDate(dt)
-		items = append(items, item)
+		if _, exists := itemMap[itemID]; !exists {
+			itemMap[itemID] = &data.CompleteJournalItem{
+				Id:          itemID,
+				JournalID:   journalID,
+				Date:        formatDate(dt),
+				Comments:    comments,
+				LastUpdated: lastUpdated,
+				Attachments: make([]data.Attachment, 0),
+			}
+			itemOrder = append(itemOrder, itemID)
+		}
+
+		if attachmentID != nil && attachmentTitle != nil {
+			itemMap[itemID].Attachments = append(itemMap[itemID].Attachments, data.Attachment{
+				Id:    *attachmentID,
+				Title: *attachmentTitle,
+			})
+		}
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	items := make([]data.CompleteJournalItem, len(itemOrder))
+	for i, itemID := range itemOrder {
+		items[i] = *itemMap[itemID]
 	}
 
 	return items, nil

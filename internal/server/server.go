@@ -371,7 +371,7 @@ func (s Server) RemoveJournals(ctx context.Context, userID string, journalIDs []
 	return tx.Commit()
 }
 
-func (s Server) GetJournalItems(ctx context.Context, userID string, journalID string) ([]data.JournalItem, error) {
+func (s Server) GetJournalItems(ctx context.Context, userID string, journalID string) ([]data.CompleteJournalItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
