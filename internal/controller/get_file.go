@@ -58,21 +58,26 @@ func (h *GetFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	small := r.URL.Query().Get("small")
 
+	contentType, err := servr.GetAttachmentContentType(ctx, id)
+	if err != nil {
+		contentType = "image/png"
+	}
+
 	if small != "" {
-		h.serveSmallFile(w, id)
+		h.serveSmallFile(w, id, contentType)
 	} else {
-		h.serveRegularFile(w, id)
+		h.serveRegularFile(w, id, contentType)
 	}
 }
 
-func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string) {
+func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string, contentType string) {
 	filename := id + ".dat"
 	filepath := filepath.Join(h.Config.Files.SmallFolder, filename)
 
 	file, err := os.Open(filepath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Content-Type", contentType)
 			w.WriteHeader(http.StatusOK)
 			w.Write(placeholderImage)
 			return
@@ -83,14 +88,14 @@ func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string) {
 	}
 	defer file.Close()
 
-	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 	if _, err := file.WriteTo(w); err != nil {
 		slog.Error("error writing file to response", "id", id, "error", err)
 	}
 }
 
-func (h *GetFileHandler) serveRegularFile(w http.ResponseWriter, id string) {
+func (h *GetFileHandler) serveRegularFile(w http.ResponseWriter, id string, contentType string) {
 	filename := id + ".dat"
 	filepath := filepath.Join(h.Config.Files.RegularFolder, filename)
 
@@ -106,7 +111,7 @@ func (h *GetFileHandler) serveRegularFile(w http.ResponseWriter, id string) {
 	}
 	defer file.Close()
 
-	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 	if _, err := file.WriteTo(w); err != nil {
 		slog.Error("error writing file to response", "id", id, "error", err)

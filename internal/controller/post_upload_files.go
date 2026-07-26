@@ -118,7 +118,8 @@ func (h *PostUploadFilesHandler) processValidFile(ctx context.Context, file io.R
 		return "", err
 	}
 
-	err = servr.CreateAttachment(ctx, journalItemID, attachmentID, filename, contentType)
+	// by default, when created, the title is empty string
+	err = servr.CreateAttachment(ctx, journalItemID, attachmentID, contentType)
 	if err != nil {
 		os.Remove(finalPath)
 		return "", err

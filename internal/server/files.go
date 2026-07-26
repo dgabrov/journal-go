@@ -12,7 +12,7 @@ import (
 	"github.com/amanagement24/journal-go/internal/data"
 )
 
-func (s Server) CreateAttachment(ctx context.Context, journalItemID string, attachmentID string, filename string, contentType string) error {
+func (s Server) CreateAttachment(ctx context.Context, journalItemID string, attachmentID string, contentType string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -23,7 +23,7 @@ func (s Server) CreateAttachment(ctx context.Context, journalItemID string, atta
 
 	_, err = tx.ExecContext(ctx,
 		"INSERT INTO attachment (attachment_id, journal_item_id, title, content_type, created_dt, updated_dt) VALUES (?, ?, ?, ?, ?, ?)",
-		attachmentID, journalItemID, filename, contentType, now, now,
+		attachmentID, journalItemID, "", contentType, now, now,
 	)
 	if err != nil {
 		return err

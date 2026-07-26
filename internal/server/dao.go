@@ -525,3 +525,27 @@ func (s Server) ValidateAttachmentAccess(ctx context.Context, userID string, att
 
 	return tx.Commit()
 }
+
+func (s Server) GetAttachmentContentType(ctx context.Context, attachmentID string) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var contentType sql.NullString
+	err = tx.QueryRowContext(ctx, "SELECT content_type FROM attachment WHERE attachment_id = ?", attachmentID).Scan(&contentType)
+	if err != nil {
+		return "image/png", nil
+	}
+
+	if !contentType.Valid || contentType.String == "" {
+		return "image/png", nil
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "image/png", nil
+	}
+
+	return contentType.String, nil
+}
