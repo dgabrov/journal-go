@@ -24,6 +24,9 @@ create table attachment
         primary key,
     journal_item_id varchar(64)                              not null,
     title           varchar(255) default ''                  not null,
+    content_type    varchar(128)                             null,
+    width           int          default 0                   not null,
+    height          int          default 0                   not null,
     created_dt      datetime     default current_timestamp() not null,
     updated_dt      datetime     default current_timestamp() not null,
     constraint fk_picture_item
@@ -78,6 +81,7 @@ create table user_journal
     constraint fk_user_journal_user
         foreign key (user_id) references user (user_id)
 );
+
 
 
 INSERT INTO relation (relation_cd, name) VALUES ('owner', 'Journal owner');
