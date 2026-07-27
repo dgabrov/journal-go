@@ -59,6 +59,7 @@ func (h *GetFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	small := r.URL.Query().Get("small")
+	download := r.URL.Query().Get("download")
 
 	contentType, err := servr.GetAttachmentContentType(ctx, id)
 	if err != nil {
@@ -68,7 +69,7 @@ func (h *GetFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if small != "" {
 		h.serveSmallFile(w, id, contentType)
 	} else {
-		h.serveRegularFile(w, id, contentType)
+		h.serveRegularFile(w, id, contentType, download != "")
 	}
 }
 
@@ -76,6 +77,25 @@ func (h *GetFileHandler) setNoCacheHeaders(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
+}
+
+func getExtensionFromContentType(contentType string) string {
+	switch contentType {
+	case "image/jpeg":
+		return ".jpeg"
+	case "image/png":
+		return ".png"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	case "image/bmp":
+		return ".bmp"
+	case "image/svg+xml":
+		return ".svg"
+	default:
+		return ""
+	}
 }
 
 func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string, contentType string) {
@@ -105,7 +125,7 @@ func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string, conten
 	}
 }
 
-func (h *GetFileHandler) serveRegularFile(w http.ResponseWriter, id string, contentType string) {
+func (h *GetFileHandler) serveRegularFile(w http.ResponseWriter, id string, contentType string, download bool) {
 	filename := id + ".dat"
 	filepath := filepath.Join(h.Config.Files.RegularFolder, filename)
 
@@ -123,6 +143,13 @@ func (h *GetFileHandler) serveRegularFile(w http.ResponseWriter, id string, cont
 
 	h.setNoCacheHeaders(w)
 	w.Header().Set("Content-Type", contentType)
+
+	if download {
+		ext := getExtensionFromContentType(contentType)
+		dispositionFilename := id + ext
+		w.Header().Set("Content-Disposition", "attachment; filename="+dispositionFilename)
+	}
+
 	w.WriteHeader(http.StatusOK)
 	if _, err := file.WriteTo(w); err != nil {
 		slog.Error("error writing file to response", "id", id, "error", err)
