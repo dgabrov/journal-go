@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"image"
 	"io"
 	"net/http"
 	"os"
@@ -12,6 +13,9 @@ import (
 	"github.com/amanagement24/journal-go/internal/data"
 	"github.com/amanagement24/journal-go/internal/server"
 	"github.com/google/uuid"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 )
 
 type PostUploadFilesHandler struct {
@@ -118,8 +122,14 @@ func (h *PostUploadFilesHandler) processValidFile(ctx context.Context, file io.R
 		return "", err
 	}
 
+	width, height, err := getImageDimensions(finalPath)
+	if err != nil {
+		os.Remove(finalPath)
+		return "", err
+	}
+
 	// by default, when created, the title is empty string
-	err = servr.CreateAttachment(ctx, journalItemID, attachmentID, contentType)
+	err = servr.CreateAttachment(ctx, journalItemID, attachmentID, contentType, width, height)
 	if err != nil {
 		os.Remove(finalPath)
 		return "", err
@@ -132,4 +142,19 @@ func (h *PostUploadFilesHandler) processThumbnails(attachmentIDs []string, regul
 	for _, id := range attachmentIDs {
 		createThumbnail(id, regularFolder, dimension, smallFolder)
 	}
+}
+
+func getImageDimensions(filePath string) (int, int, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer file.Close()
+
+	config, _, err := image.DecodeConfig(file)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return config.Width, config.Height, nil
 }

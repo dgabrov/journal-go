@@ -40,8 +40,10 @@ type JournalItem struct {
 }
 
 type Attachment struct {
-	Id    string `json:"id"`
-	Title string `json:"title"`
+	Id     string `json:"id"`
+	Title  string `json:"title"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 type CompleteJournalItem struct {
 	Id          string       `json:"id"`

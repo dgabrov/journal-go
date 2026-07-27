@@ -301,7 +301,7 @@ func (s Server) validateJournalAccess(ctx context.Context, tx *sql.Tx, userID st
 func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID string) ([]data.CompleteJournalItem, error) {
 	rows, err := tx.QueryContext(ctx, `
 		SELECT ji.journal_item_id, ji.journal_id, ji.created_dt, ji.updated_dt, ji.comments,
-		       a.attachment_id, a.title
+		       a.attachment_id, a.title, a.width, a.height
 		FROM journal_item ji
 		LEFT JOIN attachment a ON ji.journal_item_id = a.journal_item_id
 		WHERE ji.journal_id = ?
@@ -323,8 +323,10 @@ func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID 
 		var comments string
 		var attachmentID *string
 		var attachmentTitle *string
+		var width *int
+		var height *int
 
-		err := rows.Scan(&itemID, &journalID, &dt, &lastUpdated, &comments, &attachmentID, &attachmentTitle)
+		err := rows.Scan(&itemID, &journalID, &dt, &lastUpdated, &comments, &attachmentID, &attachmentTitle, &width, &height)
 		if err != nil {
 			return nil, err
 		}
@@ -342,9 +344,19 @@ func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID 
 		}
 
 		if attachmentID != nil && attachmentTitle != nil {
+			w := 0
+			h := 0
+			if width != nil {
+				w = *width
+			}
+			if height != nil {
+				h = *height
+			}
 			itemMap[itemID].Attachments = append(itemMap[itemID].Attachments, data.Attachment{
-				Id:    *attachmentID,
-				Title: *attachmentTitle,
+				Id:     *attachmentID,
+				Title:  *attachmentTitle,
+				Width:  w,
+				Height: h,
 			})
 		}
 	}
