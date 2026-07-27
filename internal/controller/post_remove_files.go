@@ -38,7 +38,7 @@ func (h *PostRemoveFilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 	}
 
 	servr := server.New(h.DB, h.Config)
-	userID, err := servr.GetUserIdFromToken(ctx, token)
+	userID, err := servr.GetUserIdFromToken(ctx, token, true)
 	if err != nil {
 		writeJsonResponse(w, nil, err)
 		return

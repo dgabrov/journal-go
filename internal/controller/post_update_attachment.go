@@ -48,7 +48,7 @@ func (h *PostUpdateAttachmentHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	}
 
 	servr := server.New(h.DB, h.Config)
-	userID, err := servr.GetUserIdFromToken(ctx, token)
+	userID, err := servr.GetUserIdFromToken(ctx, token, true)
 	if err != nil {
 		writeJsonResponse(w, nil, err)
 		return

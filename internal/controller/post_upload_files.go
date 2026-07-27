@@ -58,7 +58,7 @@ func (h *PostUploadFilesHandler) ServeHTTP(w http.ResponseWriter, r *http.Reques
 
 func (h *PostUploadFilesHandler) process(ctx context.Context, r *http.Request, journalItemID string, token string) (*data.IdsHolder, error) {
 	servr := server.New(h.DB, h.Config)
-	userID, err := servr.GetUserIdFromToken(ctx, token)
+	userID, err := servr.GetUserIdFromToken(ctx, token, true)
 	if err != nil {
 		return nil, err
 	}

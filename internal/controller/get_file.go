@@ -40,7 +40,7 @@ func (h *GetFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	servr := server.New(h.DB, h.Config)
-	userID, err := servr.GetUserIdFromToken(ctx, token)
+	userID, err := servr.GetUserIdFromToken(ctx, token, false)
 	if err != nil {
 		slog.Error("getUserIdFromToken error: " + err.Error())
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
