@@ -34,6 +34,7 @@ func (h *GetFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	token, err := getToken(r)
 	if err != nil {
+		slog.Error("getToken error: " + err.Error())
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -41,6 +42,7 @@ func (h *GetFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	servr := server.New(h.DB, h.Config)
 	userID, err := servr.GetUserIdFromToken(ctx, token)
 	if err != nil {
+		slog.Error("getUserIdFromToken error: " + err.Error())
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -70,6 +72,12 @@ func (h *GetFileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *GetFileHandler) setNoCacheHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+}
+
 func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string, contentType string) {
 	filename := id + ".dat"
 	filepath := filepath.Join(h.Config.Files.SmallFolder, filename)
@@ -77,6 +85,7 @@ func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string, conten
 	file, err := os.Open(filepath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			h.setNoCacheHeaders(w)
 			w.Header().Set("Content-Type", contentType)
 			w.WriteHeader(http.StatusOK)
 			w.Write(placeholderImage)
@@ -88,6 +97,7 @@ func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string, conten
 	}
 	defer file.Close()
 
+	h.setNoCacheHeaders(w)
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 	if _, err := file.WriteTo(w); err != nil {
@@ -111,6 +121,7 @@ func (h *GetFileHandler) serveRegularFile(w http.ResponseWriter, id string, cont
 	}
 	defer file.Close()
 
+	h.setNoCacheHeaders(w)
 	w.Header().Set("Content-Type", contentType)
 	w.WriteHeader(http.StatusOK)
 	if _, err := file.WriteTo(w); err != nil {

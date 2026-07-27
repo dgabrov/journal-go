@@ -31,6 +31,7 @@ func SetupRouter(config *data.ConfigData, db *sql.DB) *http.ServeMux {
 	mux.Handle(fullUrl(false, context, "/removeFiles"), controller.NewPostRemoveFilesHandler(config, db))
 	mux.Handle(fullUrl(false, context, "/updateTitles"), controller.NewPostUpdateTitlesHandler(config, db))
 	mux.Handle(fullUrl(false, context, "/updateAttachment"), controller.NewPostUpdateAttachmentHandler(config, db))
+	mux.Handle(fullUrl(false, context, "/updateAttachmentTitles"), controller.NewPostUpdateAttachmentTitlesHandler(config, db))
 
 	return mux
 }
