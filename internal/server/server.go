@@ -91,7 +91,7 @@ func (s Server) GetLoginResponse(ctx context.Context, id string) (*data.LoginRes
 	return response, nil
 }
 
-func (s Server) GetUserIdFromToken(ctx context.Context, token string) (string, error) {
+func (s Server) GetUserIdFromToken(ctx context.Context, token string, advanceExpiry bool) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
@@ -122,10 +122,12 @@ func (s Server) GetUserIdFromToken(ctx context.Context, token string) (string, e
 	}
 
 	// Update expiry_dt to now + tokenTimeToLive
-	newExpiry := time.Now().Add(time.Duration(s.config.TokenTimeToLive) * time.Second)
-	_, err = tx.ExecContext(ctx, "UPDATE session SET expire_dt = ? WHERE token = ?", newExpiry, token)
-	if err != nil {
-		return "", err
+	if advanceExpiry {
+		newExpiry := time.Now().Add(time.Duration(s.config.TokenTimeToLive) * time.Second)
+		_, err = tx.ExecContext(ctx, "UPDATE session SET expire_dt = ? WHERE token = ?", newExpiry, token)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -371,7 +373,7 @@ func (s Server) RemoveJournals(ctx context.Context, userID string, journalIDs []
 	return tx.Commit()
 }
 
-func (s Server) GetJournalItems(ctx context.Context, userID string, journalID string) ([]data.JournalItem, error) {
+func (s Server) GetJournalItems(ctx context.Context, userID string, journalID string) ([]data.CompleteJournalItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err

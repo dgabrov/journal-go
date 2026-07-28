@@ -39,6 +39,21 @@ type JournalItem struct {
 	LastUpdated time.Time `json:"lastUpdated"`
 }
 
+type Attachment struct {
+	Id     string `json:"id"`
+	Title  string `json:"title"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+type CompleteJournalItem struct {
+	Id          string       `json:"id"`
+	JournalID   string       `json:"journalId"`
+	Date        string       `json:"date"`
+	Comments    string       `json:"comments"`
+	LastUpdated time.Time    `json:"lastUpdated"`
+	Attachments []Attachment `json:"attachments"`
+}
+
 type CompleteJournal struct {
 	Journal Journal `json:"journal"`
 	Owner   bool    `json:"owner"`
@@ -56,6 +71,15 @@ type SearchData struct {
 
 type IdsHolder struct {
 	Ids []string `json:"ids"`
+}
+
+type TitleHolder struct {
+	AttachmentID string `json:"attachmentId"`
+	Title        string `json:"title"`
+}
+
+type Titles struct {
+	Titles []TitleHolder `json:"titles"`
 }
 
 type StringHolder struct {

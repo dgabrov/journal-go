@@ -36,14 +36,14 @@ func (h *PostJournalItemsHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	writeJsonResponse(w, items, err)
 }
 
-func (h *PostJournalItemsHandler) process(ctx context.Context, r *http.Request, stringHolder data.StringHolder) ([]data.JournalItem, error) {
+func (h *PostJournalItemsHandler) process(ctx context.Context, r *http.Request, stringHolder data.StringHolder) ([]data.CompleteJournalItem, error) {
 	token, err := getToken(r)
 	if err != nil {
 		return nil, err
 	}
 
 	servr := server.New(h.DB, h.Config)
-	userID, err := servr.GetUserIdFromToken(ctx, token)
+	userID, err := servr.GetUserIdFromToken(ctx, token, true)
 	if err != nil {
 		return nil, err
 	}

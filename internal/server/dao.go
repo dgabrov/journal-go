@@ -60,7 +60,7 @@ func (s Server) getLoginResponse(ctx context.Context, tx *sql.Tx, userID string)
 	}
 	defer rows.Close()
 
-	var journals []data.CompleteJournal
+	journals := make([]data.CompleteJournal, 0)
 	for rows.Next() {
 		var cj data.CompleteJournal
 		var isOwner int
@@ -118,7 +118,7 @@ func (s Server) searchUsers(ctx context.Context, tx *sql.Tx, userID string, sear
 	}
 	defer rows.Close()
 
-	var users []data.User
+	var users = make([]data.User, 0)
 	for rows.Next() {
 		var user data.User
 		err := rows.Scan(&user.Id, &user.Login, &user.FullName, &user.ProvidedId)
@@ -171,6 +171,34 @@ func (s Server) validateItemsOwnership(ctx context.Context, tx *sql.Tx, userID s
 	}
 
 	return nil
+}
+
+func (s Server) ValidateJournalItemOwnership(ctx context.Context, userID string, journalItemID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `
+		SELECT COUNT(*) FROM journal_item ji
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE ji.journal_item_id = ?
+		AND uj.user_id = ?
+		AND uj.relation_cd = ?
+	`
+
+	var count int
+	err = tx.QueryRowContext(ctx, query, journalItemID, userID, data.RelationOwner).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("user does not own this journal item")
+	}
+
+	return tx.Commit()
 }
 
 func (s Server) deleteItems(ctx context.Context, tx *sql.Tx, itemIDs []string) error {
@@ -270,33 +298,76 @@ func (s Server) validateJournalAccess(ctx context.Context, tx *sql.Tx, userID st
 	return nil
 }
 
-func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID string) ([]data.JournalItem, error) {
+func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID string) ([]data.CompleteJournalItem, error) {
 	rows, err := tx.QueryContext(ctx, `
-		SELECT journal_item_id, journal_id, created_dt, updated_dt, comments
-		FROM journal_item
-		WHERE journal_id = ?
-		ORDER BY created_dt DESC
+		SELECT ji.journal_item_id, ji.journal_id, ji.created_dt, ji.updated_dt, ji.comments,
+		       a.attachment_id, a.title, a.width, a.height
+		FROM journal_item ji
+		LEFT JOIN attachment a ON ji.journal_item_id = a.journal_item_id
+		WHERE ji.journal_id = ?
+		ORDER BY ji.created_dt DESC, a.attachment_id
 	`, journalID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var items []data.JournalItem
+	itemMap := make(map[string]*data.CompleteJournalItem)
+	itemOrder := make([]string, 0)
+
 	for rows.Next() {
-		var item data.JournalItem
+		var itemID string
+		var journalID string
 		var dt time.Time
-		err := rows.Scan(&item.Id, &item.JournalID, &dt, &item.LastUpdated, &item.Comments)
+		var lastUpdated time.Time
+		var comments string
+		var attachmentID *string
+		var attachmentTitle *string
+		var width *int
+		var height *int
+
+		err := rows.Scan(&itemID, &journalID, &dt, &lastUpdated, &comments, &attachmentID, &attachmentTitle, &width, &height)
 		if err != nil {
 			return nil, err
 		}
 
-		item.Date = formatDate(dt)
-		items = append(items, item)
+		if _, exists := itemMap[itemID]; !exists {
+			itemMap[itemID] = &data.CompleteJournalItem{
+				Id:          itemID,
+				JournalID:   journalID,
+				Date:        formatDate(dt),
+				Comments:    comments,
+				LastUpdated: lastUpdated,
+				Attachments: make([]data.Attachment, 0),
+			}
+			itemOrder = append(itemOrder, itemID)
+		}
+
+		if attachmentID != nil && attachmentTitle != nil {
+			w := 0
+			h := 0
+			if width != nil {
+				w = *width
+			}
+			if height != nil {
+				h = *height
+			}
+			itemMap[itemID].Attachments = append(itemMap[itemID].Attachments, data.Attachment{
+				Id:     *attachmentID,
+				Title:  *attachmentTitle,
+				Width:  w,
+				Height: h,
+			})
+		}
 	}
 
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	items := make([]data.CompleteJournalItem, len(itemOrder))
+	for i, itemID := range itemOrder {
+		items[i] = *itemMap[itemID]
 	}
 
 	return items, nil
@@ -338,7 +409,7 @@ func (s Server) getReadingUsers(ctx context.Context, tx *sql.Tx, journalID strin
 	}
 	defer rows.Close()
 
-	var users []data.User
+	var users []data.User = make([]data.User, 0)
 	for rows.Next() {
 		var user data.User
 		err := rows.Scan(&user.Id, &user.Login, &user.FullName, &user.ProvidedId)
@@ -439,4 +510,54 @@ func (s Server) updateJournalTitle(ctx context.Context, tx *sql.Tx, journalID st
 		title, journalID,
 	)
 	return err
+}
+
+func (s Server) ValidateAttachmentAccess(ctx context.Context, userID string, attachmentID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var count int
+	err = tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM attachment a
+		JOIN journal_item ji ON a.journal_item_id = ji.journal_item_id
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE a.attachment_id = ?
+		AND uj.user_id = ?
+	`, attachmentID, userID).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("attachment not found or user does not have access")
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) GetAttachmentContentType(ctx context.Context, attachmentID string) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var contentType sql.NullString
+	err = tx.QueryRowContext(ctx, "SELECT content_type FROM attachment WHERE attachment_id = ?", attachmentID).Scan(&contentType)
+	if err != nil {
+		return "image/png", nil
+	}
+
+	if !contentType.Valid || contentType.String == "" {
+		return "image/png", nil
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "image/png", nil
+	}
+
+	return contentType.String, nil
 }

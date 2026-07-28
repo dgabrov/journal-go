@@ -1,5 +1,5 @@
 ### login
-POST http://localhost:3001/servr/login
+POST http://localhost:3001/journalserv/login
 Content-Type: application/json
 
 {
@@ -105,3 +105,24 @@ Content-Type: application/json
   "ids": ["item2", "item3"]
 }
 
+### get image
+GET http://localhost:3001/journalserv/getFile?id=019f9630-e80e-7769-a022-066b843fed3a&small=1
+
+### remove items
+POST http://localhost:3001/journalserv/removeFiles
+Content-Type: application/json
+
+{
+  "ids": ["019f95ca-f0e0-70d7-ac6a-02a58bc0bc51",
+    "019f95ca-f0e0-7c05-a9a2-656f8e593f19",
+    "019f95cd-55de-7a3b-959f-6e0340597c69",
+    "019f95cd-55df-75b4-a29e-7379e759812c",
+    "019f95cf-10e6-758a-a91d-92cf0ed35f7e",
+    "019f95cf-10e6-7e30-bf0c-8c3a31c296ee",
+    "019f95d1-d912-74e3-9fe2-8247ca529489",
+    "019f95d1-d912-7e4d-9228-e4b36790497d",
+    "019f95d5-beaf-71ff-8f64-e048af249746",
+    "019f95d5-beaf-7aea-9584-91bc52f3ffa6",
+    "019f9630-e80e-7769-a022-066b843fed3a",
+    "019f9630-e80f-71f0-8ff1-6934836d49e5"]
+}

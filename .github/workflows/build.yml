@@ -1,0 +1,35 @@
+name: journal backend - golang
+run-name: journal backend - golang
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+jobs:
+  docker_login:
+    runs-on: ubuntu-latest
+    name: build accounting backend project
+    steps:
+      - name: code checkout
+        uses: actions/checkout@v4.2.2
+
+      - name: build
+        run: |
+          echo github run number: ${GITHUB_RUN_NUMBER}
+          echo $(pwd)
+          GOARCH=amd64 GOOS=linux CGO_ENABLED=0 docker run -v $(pwd):/alfa -w /alfa golang:1.26.5-alpine3.24 go build -o account_backend ./main.go
+          docker build . -t 169533462518.dkr.ecr.us-east-2.amazonaws.com/journal-go:1.0.${GITHUB_RUN_NUMBER}
+          docker image ls
+
+      - name: docker login
+        run: |
+          val=$(AWS_ACCESS_KEY_ID=${{secrets.DOCKER_AWS_KEY}} AWS_SECRET_ACCESS_KEY=${{secrets.DOCKER_AWS_SECRET}} aws ecr get-login-password --region us-east-2)
+          echo "val=$val" >> $GITHUB_ENV
+          echo $val | docker login --username AWS --password-stdin 169533462518.dkr.ecr.us-east-2.amazonaws.com
+          docker image ls
+
+      - name: docker push
+        run: |
+          docker image push 169533462518.dkr.ecr.us-east-2.amazonaws.com/journal-go:1.0.${GITHUB_RUN_NUMBER}
+          echo docker pushed successfully

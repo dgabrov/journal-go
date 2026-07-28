@@ -45,7 +45,7 @@ func (h *PostEditJournalItemHandler) process(ctx context.Context, r *http.Reques
 	}
 
 	servr := server.New(h.DB, h.Config)
-	userID, err := servr.GetUserIdFromToken(ctx, token)
+	userID, err := servr.GetUserIdFromToken(ctx, token, true)
 	if err != nil {
 		return err
 	}

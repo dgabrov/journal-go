@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"slices"
 
@@ -122,6 +123,10 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			HttpOnly: true,
 		})
+
+		slog.Info(fmt.Sprintf("successfully logged in: %s", login.Login))
+	} else {
+		slog.Info(fmt.Sprintf("failed to process login: %s", login.Login))
 	}
 
 	writeJsonResponse(w, response, err)

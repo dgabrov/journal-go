@@ -9,5 +9,10 @@
     "database": "journal"
   },
   "serverAddress": "0.0.0.0:3001",
-  "context": "/servr"
+  "context": "/journalserv",
+  "files": {
+    "smallFolder": "/home/daniel/IdeaProjects/journal-go/docs/files/small",
+    "regularFolder": "/home/daniel/IdeaProjects/journal-go/docs/files/regular",
+    "dimension": 150
+  }
 }

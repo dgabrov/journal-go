@@ -15,13 +15,20 @@ type DBConfig struct {
 	Database string `json:"database"`
 }
 
+type FilesConfig struct {
+	SmallFolder   string `json:"smallFolder"`
+	RegularFolder string `json:"regularFolder"`
+	Dimension     int    `json:"dimension"`
+}
+
 type ConfigData struct {
-	Auth            string   `json:"auth"`
-	TokenTimeToLive int      `json:"tokenTimeToLive"`
-	Access          string   `json:"access"`
-	DB              DBConfig `json:"db"`
-	ServerAddress   string   `json:"serverAddress"`
-	Context         string   `json:"context"`
+	Auth            string      `json:"auth"`
+	TokenTimeToLive int         `json:"tokenTimeToLive"`
+	Access          string      `json:"access"`
+	DB              DBConfig    `json:"db"`
+	ServerAddress   string      `json:"serverAddress"`
+	Context         string      `json:"context"`
+	Files           FilesConfig `json:"files"`
 }
 
 // LoadConfig reads the CONFIG_FILE environment variable, loads the configuration file,
@@ -56,6 +63,12 @@ func LoadConfig() (*ConfigData, error) {
 		"username", config.DB.Username,
 		"database", config.DB.Database,
 		"password_filled", config.DB.Password != "",
+	)
+
+	slog.Info("Files configuration",
+		"small_folder", config.Files.SmallFolder,
+		"regular_folder", config.Files.RegularFolder,
+		"dimension", config.Files.Dimension,
 	)
 
 	return &config, nil
