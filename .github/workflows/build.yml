@@ -18,7 +18,7 @@ jobs:
         run: |
           echo github run number: ${GITHUB_RUN_NUMBER}
           echo $(pwd)
-          GOARCH=amd64 GOOS=linux CGO_ENABLED=0 docker run -v $(pwd):/alfa -w /alfa golang:1.26.5-alpine3.24 go build -o account_backend ./start.go
+          GOARCH=amd64 GOOS=linux CGO_ENABLED=0 docker run -v $(pwd):/alfa -w /alfa golang:1.26.5-alpine3.24 go build -o account_backend ./main.go
           docker build . -t 169533462518.dkr.ecr.us-east-2.amazonaws.com/journal-go:1.0.${GITHUB_RUN_NUMBER}
           docker image ls
 
