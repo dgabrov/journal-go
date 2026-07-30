@@ -114,17 +114,6 @@ func (s Server) DeleteAttachmentFiles(attachmentIDs []string) error {
 	return nil
 }
 
-func (s Server) deleteAttachmentFile(folderPath string, id string, filename string) error {
-	filePath := filepath.Join(folderPath, filename)
-	if err := os.Remove(filePath); err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			slog.Error("failed to delete attachment file", "id", id, "path", filePath, "error", err)
-			return err
-		}
-	}
-	return nil
-}
-
 func (s Server) UpdateAttachmentTitles(ctx context.Context, titleHolders []data.TitleHolder) error {
 	if len(titleHolders) == 0 {
 		return nil
@@ -174,4 +163,15 @@ func (s Server) UpdateAttachmentContentType(ctx context.Context, attachmentID st
 	}
 
 	return tx.Commit()
+}
+
+func (s Server) deleteAttachmentFile(folderPath string, id string, filename string) error {
+	filePath := filepath.Join(folderPath, filename)
+	if err := os.Remove(filePath); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			slog.Error("failed to delete attachment file", "id", id, "path", filePath, "error", err)
+			return err
+		}
+	}
+	return nil
 }

@@ -517,3 +517,81 @@ func (s Server) CreateUserByProvidedID(ctx context.Context, id string, login str
 
 	return userID, tx.Commit()
 }
+
+func (s Server) ValidateAttachmentAccess(ctx context.Context, userID string, attachmentID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var count int
+	err = tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM attachment a
+		JOIN journal_item ji ON a.journal_item_id = ji.journal_item_id
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE a.attachment_id = ?
+		AND uj.user_id = ?
+	`, attachmentID, userID).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("attachment not found or user does not have access")
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) GetAttachmentContentType(ctx context.Context, attachmentID string) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var contentType sql.NullString
+	err = tx.QueryRowContext(ctx, "SELECT content_type FROM attachment WHERE attachment_id = ?", attachmentID).Scan(&contentType)
+	if err != nil {
+		return "image/png", nil
+	}
+
+	if !contentType.Valid || contentType.String == "" {
+		return "image/png", nil
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "image/png", nil
+	}
+
+	return contentType.String, nil
+}
+
+func (s Server) ValidateJournalItemOwnership(ctx context.Context, userID string, journalItemID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `
+		SELECT COUNT(*) FROM journal_item ji
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE ji.journal_item_id = ?
+		AND uj.user_id = ?
+		AND uj.relation_cd = ?
+	`
+
+	var count int
+	err = tx.QueryRowContext(ctx, query, journalItemID, userID, data.RelationOwner).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("user does not own this journal item")
+	}
+
+	return tx.Commit()
+}
