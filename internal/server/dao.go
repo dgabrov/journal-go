@@ -686,3 +686,14 @@ func (s Server) updateAttachmentContentTypeQuery(ctx context.Context, tx *sql.Tx
 	_, err := tx.ExecContext(ctx, "UPDATE attachment SET content_type = ? WHERE attachment_id = ?", contentType, attachmentID)
 	return err
 }
+
+func (s Server) swapAttachmentDimensions(ctx context.Context, tx *sql.Tx, attachmentID string) error {
+	var width, height int
+	err := tx.QueryRowContext(ctx, "SELECT width, height FROM attachment WHERE attachment_id = ?", attachmentID).Scan(&width, &height)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.ExecContext(ctx, "UPDATE attachment SET width = ?, height = ? WHERE attachment_id = ?", height, width, attachmentID)
+	return err
+}

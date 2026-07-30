@@ -595,3 +595,17 @@ func (s Server) UpdateAttachmentContentType(ctx context.Context, attachmentID st
 
 	return tx.Commit()
 }
+
+func (s Server) SwapAttachmentDimensions(ctx context.Context, attachmentID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.swapAttachmentDimensions(ctx, tx, attachmentID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}

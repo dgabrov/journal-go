@@ -127,6 +127,12 @@ func (h *PutRotateHandler) rotateAttachment(ctx context.Context, servr *server.S
 		return err
 	}
 
+	// Swap width and height since the image was rotated
+	if err := servr.SwapAttachmentDimensions(ctx, attachmentID); err != nil {
+		slog.Error("failed to swap attachment dimensions", "id", attachmentID, "error", err)
+		return err
+	}
+
 	slog.Info("attachment rotated", "id", attachmentID, "angle", angle)
 	return nil
 }
