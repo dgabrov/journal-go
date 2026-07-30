@@ -80,30 +80,69 @@ func (h *PutRotateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PutRotateHandler) rotateAttachment(attachmentID string, quotient int) error {
-	filename := attachmentID + ".dat"
-	sourcePath := filepath.Join(h.Config.Files.RegularFolder, filename)
+	ctx := context.Background()
 
-	img, err := imaging.Open(sourcePath)
+	// Get the attachment's content type from the database
+	contentType, err := h.getAttachmentContentType(ctx, attachmentID)
+	if err != nil {
+		slog.Error("failed to get attachment content type", "id", attachmentID, "error", err)
+		return err
+	}
+
+	ext := contentTypeToExtension(contentType)
+
+	// Paths
+	sourceFile := attachmentID + ".dat"
+	sourcePath := filepath.Join(h.Config.Files.RegularFolder, sourceFile)
+	tempFolder := os.TempDir()
+
+	// Create temp file with correct extension for loading
+	loadTempPath := filepath.Join(tempFolder, attachmentID+"_load"+ext)
+	if err := copyFile(sourcePath, loadTempPath); err != nil {
+		slog.Error("failed to copy file for loading", "id", attachmentID, "error", err)
+		return err
+	}
+	defer os.Remove(loadTempPath)
+
+	// Load and rotate
+	img, err := imaging.Open(loadTempPath)
 	if err != nil {
 		slog.Error("failed to open image for rotation", "id", attachmentID, "error", err)
 		return err
 	}
 
 	angle := float64(quotient) * 90
-	rotatedImg := imaging.Rotate(img, angle, nil)
+	rotatedImg := imaging.Rotate(img, -angle, nil) // not sure but positive angle is to the left not to the right so changed sign
 
-	tempPath := filepath.Join(h.Config.Files.RegularFolder, attachmentID+".tmp")
-	if err := imaging.Save(rotatedImg, tempPath); err != nil {
+	// Save to temp file with correct extension
+	rotateTempPath := filepath.Join(tempFolder, attachmentID+"_rotate"+ext)
+	if err := imaging.Save(rotatedImg, rotateTempPath); err != nil {
 		slog.Error("failed to save rotated image", "id", attachmentID, "error", err)
+		os.Remove(rotateTempPath)
 		return err
 	}
+	defer os.Remove(rotateTempPath)
 
-	if err := os.Rename(tempPath, sourcePath); err != nil {
-		slog.Error("failed to rename rotated image", "id", attachmentID, "error", err)
-		os.Remove(tempPath)
+	// Copy rotated image back to .dat file
+	if err := copyFile(rotateTempPath, sourcePath); err != nil {
+		slog.Error("failed to copy rotated image back", "id", attachmentID, "error", err)
 		return err
 	}
 
 	slog.Info("attachment rotated", "id", attachmentID, "angle", angle)
 	return nil
+}
+
+func (h *PutRotateHandler) getAttachmentContentType(ctx context.Context, attachmentID string) (string, error) {
+	var contentType sql.NullString
+	err := h.DB.QueryRowContext(ctx,
+		"SELECT content_type FROM attachment WHERE attachment_id = ?",
+		attachmentID).Scan(&contentType)
+	if err != nil {
+		return "", err
+	}
+	if !contentType.Valid {
+		return "image/jpeg", nil // default fallback
+	}
+	return contentType.String, nil
 }

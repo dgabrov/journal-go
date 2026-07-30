@@ -275,3 +275,34 @@ func createThumbnail(id string, regularFolder string, dimension int, smallFolder
 
 	slog.Info("thumbnail created", "id", id)
 }
+
+func contentTypeToExtension(contentType string) string {
+	switch strings.ToLower(contentType) {
+	case "image/jpeg":
+		return ".jpg"
+	case "image/png":
+		return ".png"
+	case "image/gif":
+		return ".gif"
+	case "image/webp":
+		return ".webp"
+	case "image/bmp":
+		return ".bmp"
+	case "image/tiff":
+		return ".tiff"
+	default:
+		return ".jpg" // fallback to jpg
+	}
+}
+
+func copyFile(src, dst string) error {
+	input, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("failed to read source file: %w", err)
+	}
+
+	if err := os.WriteFile(dst, input, 0644); err != nil {
+		return fmt.Errorf("failed to write destination file: %w", err)
+	}
+	return nil
+}
