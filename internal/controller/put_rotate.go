@@ -68,7 +68,7 @@ func (h *PutRotateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.rotateAttachment(req.ID, req.Quotient); err != nil {
+	if err := h.rotateAttachment(ctx, servr, req.ID, req.Quotient); err != nil {
 		writeJsonResponse(w, nil, err)
 		return
 	}
@@ -79,11 +79,9 @@ func (h *PutRotateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	writeJsonResponse(w, NewSuccess(), nil)
 }
 
-func (h *PutRotateHandler) rotateAttachment(attachmentID string, quotient int) error {
-	ctx := context.Background()
-
-	// Get the attachment's content type from the database
-	contentType, err := h.getAttachmentContentType(ctx, attachmentID)
+func (h *PutRotateHandler) rotateAttachment(ctx context.Context, servr *server.Server, attachmentID string, quotient int) error {
+	// Get the attachment's content type from the service layer
+	contentType, err := servr.GetAttachmentContentType(ctx, attachmentID)
 	if err != nil {
 		slog.Error("failed to get attachment content type", "id", attachmentID, "error", err)
 		return err
@@ -131,18 +129,4 @@ func (h *PutRotateHandler) rotateAttachment(attachmentID string, quotient int) e
 
 	slog.Info("attachment rotated", "id", attachmentID, "angle", angle)
 	return nil
-}
-
-func (h *PutRotateHandler) getAttachmentContentType(ctx context.Context, attachmentID string) (string, error) {
-	var contentType sql.NullString
-	err := h.DB.QueryRowContext(ctx,
-		"SELECT content_type FROM attachment WHERE attachment_id = ?",
-		attachmentID).Scan(&contentType)
-	if err != nil {
-		return "", err
-	}
-	if !contentType.Valid {
-		return "image/jpeg", nil // default fallback
-	}
-	return contentType.String, nil
 }
