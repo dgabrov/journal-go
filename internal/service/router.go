@@ -12,35 +12,31 @@ func SetupRouter(config *data.ConfigData, db *sql.DB) *http.ServeMux {
 	mux := http.NewServeMux()
 	context := config.Context
 
-	mux.Handle(fullUrl(true, context, "/"), controller.NewRootHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/login"), controller.NewLoginHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/editJournalItem"), controller.NewPostEditJournalItemHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/addJournalItem"), controller.NewPostAddJournalItemHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/searchUsers"), controller.NewPostSearchUsersHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/logout"), controller.NewPostLogoutHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/removeItems"), controller.NewPostRemoveItemsHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/removeJournals"), controller.NewPostRemoveJournalsHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/journalItems"), controller.NewPostJournalItemsHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/removeReading"), controller.NewPostRemoveReadingHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/readingUsers"), controller.NewPostReadingUsersHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/addReadingUsers"), controller.NewPostAddReadingHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/addJournal"), controller.NewPostAddJournalHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/updateJournal"), controller.NewPostUpdateJournalHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/uploadFiles"), controller.NewPostUploadFilesHandler(config, db))
-	mux.Handle(fullUrl(true, context, "/getFile"), controller.NewGetFileHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/removeFiles"), controller.NewPostRemoveFilesHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/updateTitles"), controller.NewPostUpdateTitlesHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/updateAttachment"), controller.NewPostUpdateAttachmentHandler(config, db))
-	mux.Handle(fullUrl(false, context, "/updateAttachmentTitles"), controller.NewPostUpdateAttachmentTitlesHandler(config, db))
+	mux.Handle(fullUrlWithMethod("GET", context, "/"), controller.NewRootHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/login"), controller.NewLoginHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/editJournalItem"), controller.NewPostEditJournalItemHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/addJournalItem"), controller.NewPostAddJournalItemHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/searchUsers"), controller.NewPostSearchUsersHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/logout"), controller.NewPostLogoutHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/removeItems"), controller.NewPostRemoveItemsHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/removeJournals"), controller.NewPostRemoveJournalsHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/journalItems"), controller.NewPostJournalItemsHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/removeReading"), controller.NewPostRemoveReadingHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/readingUsers"), controller.NewPostReadingUsersHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/addReadingUsers"), controller.NewPostAddReadingHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/addJournal"), controller.NewPostAddJournalHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/updateJournal"), controller.NewPostUpdateJournalHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/uploadFiles"), controller.NewPostUploadFilesHandler(config, db))
+	mux.Handle(fullUrlWithMethod("GET", context, "/getFile"), controller.NewGetFileHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/removeFiles"), controller.NewPostRemoveFilesHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/updateTitles"), controller.NewPostUpdateTitlesHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/updateAttachment"), controller.NewPostUpdateAttachmentHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/updateAttachmentTitles"), controller.NewPostUpdateAttachmentTitlesHandler(config, db))
+	mux.Handle(fullUrlWithMethod("PUT", context, "/rotate"), controller.NewPutRotateHandler(config, db))
 
 	return mux
 }
 
-func fullUrl(get bool, context string, url string) string {
-	prefix := "POST "
-	if get {
-		prefix = "GET "
-	}
-
-	return prefix + context + url
+func fullUrlWithMethod(method string, context string, url string) string {
+	return method + " " + context + url
 }
