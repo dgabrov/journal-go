@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -345,10 +348,6 @@ func (s Server) retrieveJournalItems(ctx context.Context, tx *sql.Tx, journalID 
 	return items, nil
 }
 
-func formatDate(dt time.Time) string {
-	return dt.Format("Jan 2, 2006")
-}
-
 func (s Server) removeReadingPrivileges(ctx context.Context, tx *sql.Tx, journalID string, userIDs []string) error {
 	if len(userIDs) == 0 {
 		return nil
@@ -481,5 +480,209 @@ func (s Server) updateJournalTitle(ctx context.Context, tx *sql.Tx, journalID st
 		"UPDATE journal SET title = ? WHERE journal_id = ?",
 		title, journalID,
 	)
+	return err
+}
+
+func (s Server) validateNoDuplicateIds(ids []string) error {
+	seen := make(map[string]bool)
+	for _, id := range ids {
+		if seen[id] {
+			return errors.New("duplicate ids found")
+		}
+		seen[id] = true
+	}
+	return nil
+}
+
+func (s Server) filterCurrentUser(userID string, targetUserIDs []string) []string {
+	filtered := make([]string, 0)
+	for _, id := range targetUserIDs {
+		if id != userID {
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered
+}
+
+func (s Server) filterDuplicateIds(ids []string) []string {
+	seen := make(map[string]bool)
+	filtered := make([]string, 0)
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered
+}
+
+func (s Server) validateJournalOwnership(ctx context.Context, tx *sql.Tx, userID string, journalID string) error {
+	var count int
+	err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM user_journal
+		WHERE journal_id = ?
+		AND user_id = ?
+		AND relation_cd = ?
+	`, journalID, userID, data.RelationOwner).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("journal not found or user is not the owner")
+	}
+
+	return nil
+}
+
+func (s Server) deleteAttachmentFile(folderPath string, id string, filename string) error {
+	filePath := filepath.Join(folderPath, filename)
+	if err := os.Remove(filePath); err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			slog.Error("failed to delete attachment file", "id", id, "path", filePath, "error", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (s Server) checkJournalOwnership(ctx context.Context, tx *sql.Tx, userID string, journalID string) (string, error) {
+	row := tx.QueryRowContext(ctx, "SELECT relation_cd FROM user_journal WHERE user_id = ? AND journal_id = ?", userID, journalID)
+	var relationCd string
+	err := row.Scan(&relationCd)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", errors.New("journal not found or user does not have access")
+	}
+	if err != nil {
+		return "", err
+	}
+	return relationCd, nil
+}
+
+func (s Server) getSessionByToken(ctx context.Context, tx *sql.Tx, token string) (userID string, expiredInd string, expireDt *time.Time, err error) {
+	row := tx.QueryRowContext(ctx, "SELECT user_id, expired_ind, expire_dt FROM session WHERE token = ?", token)
+	err = row.Scan(&userID, &expiredInd, &expireDt)
+	return
+}
+
+func (s Server) updateSessionExpiry(ctx context.Context, tx *sql.Tx, token string, newExpiry time.Time) error {
+	_, err := tx.ExecContext(ctx, "UPDATE session SET expire_dt = ? WHERE token = ?", newExpiry, token)
+	return err
+}
+
+func (s Server) updateJournalItemComments(ctx context.Context, tx *sql.Tx, journalItemID string, comments string, now time.Time) error {
+	_, err := tx.ExecContext(ctx, "UPDATE journal_item SET comments = ?, updated_dt = ? WHERE journal_item_id = ?", comments, now, journalItemID)
+	return err
+}
+
+func (s Server) insertJournalItem(ctx context.Context, tx *sql.Tx, id string, journalID string, createdDate time.Time, updatedDate time.Time, comments string) error {
+	_, err := tx.ExecContext(ctx, "INSERT INTO journal_item (journal_item_id, journal_id, created_dt, updated_dt, comments) VALUES (?, ?, ?, ?, ?)", id, journalID, createdDate, updatedDate, comments)
+	return err
+}
+
+func (s Server) insertUser(ctx context.Context, tx *sql.Tx, userID string, id string, login string, name string, now time.Time) error {
+	_, err := tx.ExecContext(ctx, "INSERT INTO user (user_id, provided_id, login, name, created_dt) VALUES (?, ?, ?, ?, ?)", userID, id, login, name, now)
+	return err
+}
+
+func (s Server) validateAttachmentAccessQuery(ctx context.Context, tx *sql.Tx, attachmentID string, userID string) (int, error) {
+	var count int
+	err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM attachment a
+		JOIN journal_item ji ON a.journal_item_id = ji.journal_item_id
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE a.attachment_id = ?
+		AND uj.user_id = ?
+	`, attachmentID, userID).Scan(&count)
+	return count, err
+}
+
+func (s Server) getAttachmentContentTypeQuery(ctx context.Context, tx *sql.Tx, attachmentID string) (string, error) {
+	var contentType sql.NullString
+	err := tx.QueryRowContext(ctx, "SELECT content_type FROM attachment WHERE attachment_id = ?", attachmentID).Scan(&contentType)
+	if err != nil {
+		return "image/png", nil
+	}
+
+	if !contentType.Valid || contentType.String == "" {
+		return "image/png", nil
+	}
+
+	return contentType.String, nil
+}
+
+func (s Server) validateJournalItemOwnershipQuery(ctx context.Context, tx *sql.Tx, userID string, journalItemID string) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM journal_item ji
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE ji.journal_item_id = ?
+		AND uj.user_id = ?
+		AND uj.relation_cd = ?
+	`
+
+	var count int
+	err := tx.QueryRowContext(ctx, query, journalItemID, userID, data.RelationOwner).Scan(&count)
+	return count, err
+}
+
+func (s Server) insertAttachment(ctx context.Context, tx *sql.Tx, attachmentID string, journalItemID string, contentType string, width int, height int, now time.Time) error {
+	_, err := tx.ExecContext(ctx,
+		"INSERT INTO attachment (attachment_id, journal_item_id, title, content_type, width, height, created_dt, updated_dt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		attachmentID, journalItemID, "", contentType, width, height, now, now,
+	)
+	return err
+}
+
+func (s Server) validateAttachmentsOwnershipQuery(ctx context.Context, tx *sql.Tx, attachmentIDs []string, userID string) (int, error) {
+	placeholders := strings.Repeat("?,", len(attachmentIDs)-1) + "?"
+	args := make([]any, len(attachmentIDs))
+	for i, id := range attachmentIDs {
+		args[i] = id
+	}
+
+	query := `
+		SELECT COUNT(*) FROM attachment a
+		JOIN journal_item ji ON a.journal_item_id = ji.journal_item_id
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE a.attachment_id IN (` + placeholders + `)
+		AND uj.user_id = ?
+		AND uj.relation_cd = ?
+	`
+	args = append(args, userID, data.RelationOwner)
+
+	var count int
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&count)
+	return count, err
+}
+
+func (s Server) deleteAttachmentsQuery(ctx context.Context, tx *sql.Tx, attachmentIDs []string) error {
+	placeholders := strings.Repeat("?,", len(attachmentIDs)-1) + "?"
+	deleteArgs := make([]any, len(attachmentIDs))
+	for i, id := range attachmentIDs {
+		deleteArgs[i] = id
+	}
+
+	deleteQuery := `DELETE FROM attachment WHERE attachment_id IN (` + placeholders + `)`
+	_, err := tx.ExecContext(ctx, deleteQuery, deleteArgs...)
+	return err
+}
+
+func (s Server) updateAttachmentTitlesQuery(ctx context.Context, tx *sql.Tx, titleHolders []data.TitleHolder) error {
+	for _, th := range titleHolders {
+		_, err := tx.ExecContext(ctx, "UPDATE attachment SET title = ? WHERE attachment_id = ?", th.Title, th.AttachmentID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s Server) updateAttachmentTitleQuery(ctx context.Context, tx *sql.Tx, attachmentID string, title string) error {
+	_, err := tx.ExecContext(ctx, "UPDATE attachment SET title = ? WHERE attachment_id = ?", title, attachmentID)
+	return err
+}
+
+func (s Server) updateAttachmentContentTypeQuery(ctx context.Context, tx *sql.Tx, attachmentID string, contentType string) error {
+	_, err := tx.ExecContext(ctx, "UPDATE attachment SET content_type = ? WHERE attachment_id = ?", contentType, attachmentID)
 	return err
 }

@@ -27,6 +27,13 @@ func (e *ErrTokenExpired) Error() string {
 	return "token expired"
 }
 
+func New(db *sql.DB, config *data.ConfigData) *Server {
+	return &Server{
+		db:     db,
+		config: config,
+	}
+}
+
 func (s Server) GetUserByProvidedId(ctx context.Context, providedID string) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -65,13 +72,6 @@ func (s Server) CreateSessionForUser(ctx context.Context, userID string, token s
 	return nil
 }
 
-func New(db *sql.DB, config *data.ConfigData) *Server {
-	return &Server{
-		db:     db,
-		config: config,
-	}
-}
-
 func (s Server) GetLoginResponse(ctx context.Context, id string) (*data.LoginResponse, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -98,12 +98,7 @@ func (s Server) GetUserIdFromToken(ctx context.Context, token string, advanceExp
 	}
 	defer tx.Rollback()
 
-	var userID string
-	var expiredInd string
-	var expireDt *time.Time
-
-	row := tx.QueryRowContext(ctx, "SELECT user_id, expired_ind, expire_dt FROM session WHERE token = ?", token)
-	err = row.Scan(&userID, &expiredInd, &expireDt)
+	userID, expiredInd, expireDt, err := s.getSessionByToken(ctx, tx, token)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", &ErrTokenNotFound{}
 	}
@@ -124,17 +119,12 @@ func (s Server) GetUserIdFromToken(ctx context.Context, token string, advanceExp
 	// Update expiry_dt to now + tokenTimeToLive
 	if advanceExpiry {
 		newExpiry := time.Now().Add(time.Duration(s.config.TokenTimeToLive) * time.Second)
-		_, err = tx.ExecContext(ctx, "UPDATE session SET expire_dt = ? WHERE token = ?", newExpiry, token)
-		if err != nil {
+		if err := s.updateSessionExpiry(ctx, tx, token, newExpiry); err != nil {
 			return "", err
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return "", err
-	}
-
-	return userID, nil
+	return userID, tx.Commit()
 }
 
 func (s Server) UpdateJournalItem(ctx context.Context, userID string, item data.JournalItem) error {
@@ -149,12 +139,7 @@ func (s Server) UpdateJournalItem(ctx context.Context, userID string, item data.
 	defer tx.Rollback()
 
 	// Check if user owns the journal
-	row := tx.QueryRowContext(ctx, "SELECT relation_cd FROM user_journal WHERE user_id = ? AND journal_id = ?", userID, item.JournalID)
-	var relationCd string
-	err = row.Scan(&relationCd)
-	if errors.Is(err, sql.ErrNoRows) {
-		return errors.New("journal not found or user does not have access")
-	}
+	relationCd, err := s.checkJournalOwnership(ctx, tx, userID, item.JournalID)
 	if err != nil {
 		return err
 	}
@@ -165,8 +150,7 @@ func (s Server) UpdateJournalItem(ctx context.Context, userID string, item data.
 
 	// Update the journal item with comments and current timestamp
 	now := time.Now()
-	_, err = tx.ExecContext(ctx, "UPDATE journal_item SET comments = ?, updated_dt = ? WHERE journal_item_id = ?", item.Comments, now, item.Id)
-	if err != nil {
+	if err := s.updateJournalItemComments(ctx, tx, item.Id, item.Comments, now); err != nil {
 		return err
 	}
 
@@ -185,12 +169,7 @@ func (s Server) AddJournalItem(ctx context.Context, userID string, item data.Jou
 	defer tx.Rollback()
 
 	// Check if user owns the journal
-	row := tx.QueryRowContext(ctx, "SELECT relation_cd FROM user_journal WHERE user_id = ? AND journal_id = ?", userID, item.JournalID)
-	var relationCd string
-	err = row.Scan(&relationCd)
-	if errors.Is(err, sql.ErrNoRows) {
-		return errors.New("journal not found or user does not have access")
-	}
+	relationCd, err := s.checkJournalOwnership(ctx, tx, userID, item.JournalID)
 	if err != nil {
 		return err
 	}
@@ -208,35 +187,11 @@ func (s Server) AddJournalItem(ctx context.Context, userID string, item data.Jou
 	updatedDate := time.Now()
 
 	// Insert the journal item
-	_, err = tx.ExecContext(ctx, "INSERT INTO journal_item (journal_item_id, journal_id, created_dt, updated_dt, comments) VALUES (?, ?, ?, ?, ?)", id, item.JournalID, createdDate, updatedDate, item.Comments)
-	if err != nil {
+	if err := s.insertJournalItem(ctx, tx, id, item.JournalID, createdDate, updatedDate, item.Comments); err != nil {
 		return err
 	}
 
 	return tx.Commit()
-}
-
-func parseDate(dtStr string) (time.Time, error) {
-	formats := []string{
-		"Jan 2, 2006",
-		"Jan2, 2006",
-		"Jan 2",
-		"Jan2",
-		"2006-01-02",
-	}
-
-	for _, format := range formats {
-		t, err := time.Parse(format, dtStr)
-		if err == nil {
-			if format == "Jan 2" {
-				currentYear := time.Now().Year()
-				return time.Date(currentYear, t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
-			}
-			return t, nil
-		}
-	}
-
-	return time.Time{}, errors.New("cannot parse date in any supported format")
 }
 
 func (s Server) SearchUsers(ctx context.Context, userID string, search string) ([]data.User, error) {
@@ -271,58 +226,6 @@ func (s Server) LogoutUser(ctx context.Context, token string) error {
 	}
 
 	return tx.Commit()
-}
-
-func (s Server) validateNoDuplicateIds(ids []string) error {
-	seen := make(map[string]bool)
-	for _, id := range ids {
-		if seen[id] {
-			return errors.New("duplicate ids found")
-		}
-		seen[id] = true
-	}
-	return nil
-}
-
-func (s Server) filterCurrentUser(userID string, targetUserIDs []string) []string {
-	filtered := make([]string, 0)
-	for _, id := range targetUserIDs {
-		if id != userID {
-			filtered = append(filtered, id)
-		}
-	}
-	return filtered
-}
-
-func (s Server) filterDuplicateIds(ids []string) []string {
-	seen := make(map[string]bool)
-	filtered := make([]string, 0)
-	for _, id := range ids {
-		if !seen[id] {
-			seen[id] = true
-			filtered = append(filtered, id)
-		}
-	}
-	return filtered
-}
-
-func (s Server) validateJournalOwnership(ctx context.Context, tx *sql.Tx, userID string, journalID string) error {
-	var count int
-	err := tx.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM user_journal
-		WHERE journal_id = ?
-		AND user_id = ?
-		AND relation_cd = ?
-	`, journalID, userID, data.RelationOwner).Scan(&count)
-	if err != nil {
-		return err
-	}
-
-	if count == 0 {
-		return errors.New("journal not found or user is not the owner")
-	}
-
-	return nil
 }
 
 func (s Server) RemoveItems(ctx context.Context, userID string, itemIDs []string) error {
@@ -510,8 +413,7 @@ func (s Server) CreateUserByProvidedID(ctx context.Context, id string, login str
 	userID := uuid.Must(uuid.NewV7()).String()
 	now := time.Now()
 
-	_, err = tx.ExecContext(ctx, "INSERT INTO user (user_id, provided_id, login, name, created_dt) VALUES (?, ?, ?, ?, ?)", userID, id, login, name, now)
-	if err != nil {
+	if err := s.insertUser(ctx, tx, userID, id, login, name, now); err != nil {
 		return "", err
 	}
 
@@ -525,14 +427,7 @@ func (s Server) ValidateAttachmentAccess(ctx context.Context, userID string, att
 	}
 	defer tx.Rollback()
 
-	var count int
-	err = tx.QueryRowContext(ctx, `
-		SELECT COUNT(*) FROM attachment a
-		JOIN journal_item ji ON a.journal_item_id = ji.journal_item_id
-		JOIN user_journal uj ON ji.journal_id = uj.journal_id
-		WHERE a.attachment_id = ?
-		AND uj.user_id = ?
-	`, attachmentID, userID).Scan(&count)
+	count, err := s.validateAttachmentAccessQuery(ctx, tx, attachmentID, userID)
 	if err != nil {
 		return err
 	}
@@ -551,13 +446,8 @@ func (s Server) GetAttachmentContentType(ctx context.Context, attachmentID strin
 	}
 	defer tx.Rollback()
 
-	var contentType sql.NullString
-	err = tx.QueryRowContext(ctx, "SELECT content_type FROM attachment WHERE attachment_id = ?", attachmentID).Scan(&contentType)
+	contentType, err := s.getAttachmentContentTypeQuery(ctx, tx, attachmentID)
 	if err != nil {
-		return "image/png", nil
-	}
-
-	if !contentType.Valid || contentType.String == "" {
 		return "image/png", nil
 	}
 
@@ -565,7 +455,7 @@ func (s Server) GetAttachmentContentType(ctx context.Context, attachmentID strin
 		return "image/png", nil
 	}
 
-	return contentType.String, nil
+	return contentType, nil
 }
 
 func (s Server) ValidateJournalItemOwnership(ctx context.Context, userID string, journalItemID string) error {
@@ -575,22 +465,132 @@ func (s Server) ValidateJournalItemOwnership(ctx context.Context, userID string,
 	}
 	defer tx.Rollback()
 
-	query := `
-		SELECT COUNT(*) FROM journal_item ji
-		JOIN user_journal uj ON ji.journal_id = uj.journal_id
-		WHERE ji.journal_item_id = ?
-		AND uj.user_id = ?
-		AND uj.relation_cd = ?
-	`
-
-	var count int
-	err = tx.QueryRowContext(ctx, query, journalItemID, userID, data.RelationOwner).Scan(&count)
+	count, err := s.validateJournalItemOwnershipQuery(ctx, tx, userID, journalItemID)
 	if err != nil {
 		return err
 	}
 
 	if count == 0 {
 		return errors.New("user does not own this journal item")
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) CreateAttachment(ctx context.Context, journalItemID string, attachmentID string, contentType string, width int, height int) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	now := time.Now()
+
+	if err := s.insertAttachment(ctx, tx, attachmentID, journalItemID, contentType, width, height, now); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) ValidateAttachmentsOwnership(ctx context.Context, userID string, attachmentIDs []string) error {
+	if len(attachmentIDs) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	count, err := s.validateAttachmentsOwnershipQuery(ctx, tx, attachmentIDs, userID)
+	if err != nil {
+		return err
+	}
+
+	if count != len(attachmentIDs) {
+		return errors.New("some attachments do not belong to journals owned by the user")
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) DeleteAttachments(ctx context.Context, attachmentIDs []string) error {
+	if len(attachmentIDs) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.deleteAttachmentsQuery(ctx, tx, attachmentIDs); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) DeleteAttachmentFiles(attachmentIDs []string) error {
+	for _, id := range attachmentIDs {
+		filename := id + ".dat"
+
+		if err := s.deleteAttachmentFile(s.config.Files.SmallFolder, id, filename); err != nil {
+			return err
+		}
+
+		if err := s.deleteAttachmentFile(s.config.Files.RegularFolder, id, filename); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s Server) UpdateAttachmentTitles(ctx context.Context, titleHolders []data.TitleHolder) error {
+	if len(titleHolders) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.updateAttachmentTitlesQuery(ctx, tx, titleHolders); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) UpdateAttachmentTitle(ctx context.Context, attachmentID string, title string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.updateAttachmentTitleQuery(ctx, tx, attachmentID, title); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) UpdateAttachmentContentType(ctx context.Context, attachmentID string, contentType string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.updateAttachmentContentTypeQuery(ctx, tx, attachmentID, contentType); err != nil {
+		return err
 	}
 
 	return tx.Commit()
