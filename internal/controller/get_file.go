@@ -12,6 +12,7 @@ import (
 
 	"github.com/amanagement24/journal-go/internal/data"
 	"github.com/amanagement24/journal-go/internal/server"
+	"github.com/amanagement24/journal-go/internal/util"
 )
 
 //go:embed placeholder.png
@@ -79,25 +80,6 @@ func (h *GetFileHandler) setNoCacheHeaders(w http.ResponseWriter) {
 	w.Header().Set("Expires", "0")
 }
 
-func getExtensionFromContentType(contentType string) string {
-	switch contentType {
-	case "image/jpeg":
-		return ".jpeg"
-	case "image/png":
-		return ".png"
-	case "image/gif":
-		return ".gif"
-	case "image/webp":
-		return ".webp"
-	case "image/bmp":
-		return ".bmp"
-	case "image/svg+xml":
-		return ".svg"
-	default:
-		return ""
-	}
-}
-
 func (h *GetFileHandler) serveSmallFile(w http.ResponseWriter, id string, contentType string) {
 	filename := id + ".dat"
 	filepath := filepath.Join(h.Config.Files.SmallFolder, filename)
@@ -145,7 +127,7 @@ func (h *GetFileHandler) serveRegularFile(w http.ResponseWriter, id string, cont
 	w.Header().Set("Content-Type", contentType)
 
 	if download {
-		ext := getExtensionFromContentType(contentType)
+		ext := util.GetExtensionFromContentType(contentType)
 		dispositionFilename := id + ext
 		w.Header().Set("Content-Disposition", "attachment; filename="+dispositionFilename)
 	}

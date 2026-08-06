@@ -1,12 +1,18 @@
 package server
 
 import (
+	"archive/zip"
 	"context"
 	"database/sql"
 	"errors"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/amanagement24/journal-go/internal/data"
+	"github.com/amanagement24/journal-go/internal/util"
 	"github.com/google/uuid"
 )
 
@@ -636,4 +642,138 @@ func (s Server) CreateJob(ctx context.Context, userID string, journalItemID stri
 	}
 
 	return tx.Commit()
+}
+
+func (s Server) ProcessJob(ctx context.Context, jobID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	jobRecord, err := s.getJobRecord(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+
+	if jobRecord.Status != "pending" {
+		slog.Warn("Job status is not pending", "jobID", jobID, "status", jobRecord.Status)
+		return tx.Commit()
+	}
+
+	attachments, err := s.getAttachmentsForJournalItem(ctx, tx, jobRecord.JournalItemID)
+	if err != nil {
+		return err
+	}
+
+	if len(attachments) == 0 {
+		if err := s.updateJobStatus(ctx, tx, jobID, "error"); err != nil {
+			return err
+		}
+		slog.Warn("No attachments found for job", "jobID", jobID)
+		return tx.Commit()
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	tempDir := os.TempDir()
+	guid := uuid.Must(uuid.NewV7()).String()
+	jobTempDir := filepath.Join(tempDir, "job_"+guid)
+
+	if err := os.MkdirAll(jobTempDir, 0755); err != nil {
+		return err
+	}
+	defer os.RemoveAll(jobTempDir)
+
+	for _, attachment := range attachments {
+		sourceFile := filepath.Join(s.config.Files.RegularFolder, attachment.ID+".dat")
+		ext := util.GetExtensionFromContentType(attachment.ContentType)
+		destFile := filepath.Join(jobTempDir, attachment.ID+ext)
+
+		if err := s.copyFile(sourceFile, destFile); err != nil {
+			return err
+		}
+	}
+
+	zipPath := filepath.Join(s.config.Files.JobFolder, jobID+".zip")
+	if err := s.zipDirectory(jobTempDir, zipPath); err != nil {
+		return err
+	}
+
+	completeTx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer completeTx.Rollback()
+
+	if err := s.updateJobStatus(ctx, completeTx, jobID, "completed"); err != nil {
+		return err
+	}
+
+	return completeTx.Commit()
+}
+
+func (s Server) copyFile(src string, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+
+	return dstFile.Sync()
+}
+
+func (s Server) zipDirectory(sourceDir string, zipPath string) error {
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return err
+	}
+	defer zipFile.Close()
+
+	zw := zip.NewWriter(zipFile)
+	defer zw.Close()
+
+	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		relPath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+
+		zf, err := zw.Create(relPath)
+		if err != nil {
+			return err
+		}
+
+		if _, err := io.Copy(zf, file); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }

@@ -769,3 +769,72 @@ func (s Server) createJobEntry(ctx context.Context, tx *sql.Tx, journalItemID st
 
 	return err
 }
+
+type JobRecord struct {
+	ID            string
+	Name          string
+	JournalItemID string
+	Status        string
+	CreateDt      time.Time
+}
+
+type AttachmentRecord struct {
+	ID          string
+	ContentType string
+}
+
+func (s Server) getJobRecord(ctx context.Context, tx *sql.Tx, jobID string) (*JobRecord, error) {
+	query := `
+		SELECT job_id, name, journal_item_id, status, create_dt
+		FROM job
+		WHERE job_id = ?
+	`
+
+	var record JobRecord
+	err := tx.QueryRowContext(ctx, query, jobID).Scan(
+		&record.ID, &record.Name, &record.JournalItemID, &record.Status, &record.CreateDt,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.New("job not found")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &record, nil
+}
+
+func (s Server) getAttachmentsForJournalItem(ctx context.Context, tx *sql.Tx, journalItemID string) ([]AttachmentRecord, error) {
+	query := `
+		SELECT attachment_id, content_type
+		FROM attachment
+		WHERE journal_item_id = ?
+	`
+
+	rows, err := tx.QueryContext(ctx, query, journalItemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var attachments []AttachmentRecord
+	for rows.Next() {
+		var attachment AttachmentRecord
+		if err := rows.Scan(&attachment.ID, &attachment.ContentType); err != nil {
+			return nil, err
+		}
+		attachments = append(attachments, attachment)
+	}
+
+	return attachments, rows.Err()
+}
+
+func (s Server) updateJobStatus(ctx context.Context, tx *sql.Tx, jobID string, status string) error {
+	_, err := tx.ExecContext(ctx,
+		"UPDATE job SET status = ? WHERE job_id = ?",
+		status, jobID,
+	)
+	return err
+}
