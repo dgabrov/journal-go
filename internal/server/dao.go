@@ -757,14 +757,14 @@ func (s Server) getJournalTitleAndItemCreatedDt(ctx context.Context, tx *sql.Tx,
 	return title, createdDt, nil
 }
 
-func (s Server) createJobEntry(ctx context.Context, tx *sql.Tx, journalItemID string, journalTitle string, itemCreatedDt time.Time, now time.Time) error {
+func (s Server) createJobEntry(ctx context.Context, tx *sql.Tx, userID string, journalItemID string, journalTitle string, itemCreatedDt time.Time, now time.Time) error {
 	jobID := uuid.Must(uuid.NewV7()).String()
 	formattedDt := itemCreatedDt.Format("2006-01-02")
 	jobName := journalTitle + "_" + formattedDt
 
 	_, err := tx.ExecContext(ctx,
-		"INSERT INTO job (job_id, name, journal_item_id, status, create_dt) VALUES (?, ?, ?, ?, ?)",
-		jobID, jobName, journalItemID, "pending", now,
+		"INSERT INTO job (job_id, name, user_id, journal_item_id, status, create_dt) VALUES (?, ?, ?, ?, ?, ?)",
+		jobID, jobName, userID, journalItemID, "pending", now,
 	)
 
 	return err
@@ -837,4 +837,30 @@ func (s Server) updateJobStatus(ctx context.Context, tx *sql.Tx, jobID string, s
 		status, jobID,
 	)
 	return err
+}
+
+func (s Server) getPendingJobsQuery(ctx context.Context, tx *sql.Tx) ([]string, error) {
+	query := `
+		SELECT job_id
+		FROM job
+		WHERE status = 'pending'
+		ORDER BY create_dt ASC
+	`
+
+	rows, err := tx.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobIDs []string
+	for rows.Next() {
+		var jobID string
+		if err := rows.Scan(&jobID); err != nil {
+			return nil, err
+		}
+		jobIDs = append(jobIDs, jobID)
+	}
+
+	return jobIDs, rows.Err()
 }

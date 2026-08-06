@@ -637,11 +637,26 @@ func (s Server) CreateJob(ctx context.Context, userID string, journalItemID stri
 	}
 
 	now := time.Now()
-	if err := s.createJobEntry(ctx, tx, journalItemID, journalTitle, itemCreatedDt, now); err != nil {
+	if err := s.createJobEntry(ctx, tx, userID, journalItemID, journalTitle, itemCreatedDt, now); err != nil {
 		return err
 	}
 
 	return tx.Commit()
+}
+
+func (s Server) GetPendingJobs(ctx context.Context) ([]string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	jobIDs, err := s.getPendingJobsQuery(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	return jobIDs, tx.Commit()
 }
 
 func (s Server) ProcessJob(ctx context.Context, jobID string) error {

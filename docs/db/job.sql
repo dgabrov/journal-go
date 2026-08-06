@@ -5,6 +5,7 @@ create table job
         primary key,
     name            varchar(255) default ''                  not null,
     status          varchar(128) default 'pending'           not null,
+    user_id         varchar(64)                              null,
     journal_item_id varchar(64)                              not null,
     create_dt       datetime     default current_timestamp() not null,
     constraint fk_job_journal_item
