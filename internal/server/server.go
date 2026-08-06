@@ -719,6 +719,69 @@ func (s Server) JobIsCompleted(ctx context.Context, jobID string) (bool, error) 
 	return isCompleted, tx.Commit()
 }
 
+func (s Server) ValidateJobsExist(ctx context.Context, jobIDs []string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.validateJobsExistQuery(ctx, tx, jobIDs); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) ValidateJobsBelongToUser(ctx context.Context, jobIDs []string, userID string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.validateJobsBelongToUserQuery(ctx, tx, jobIDs, userID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) DeleteJobs(ctx context.Context, jobIDs []string, config *data.ConfigData) error {
+	for _, jobID := range jobIDs {
+		jobFilePath := filepath.Join(config.Files.JobFolder, jobID+".zip")
+		if err := os.Remove(jobFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("Failed to delete job file", "jobID", jobID, "error", err)
+		}
+
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			slog.Warn("Failed to delete job from database", "jobID", jobID, "error", err)
+			continue
+		}
+
+		if err := s.deleteJobQuery(ctx, tx, jobID); err != nil {
+			slog.Warn("Failed to delete job record", "jobID", jobID, "error", err)
+			tx.Rollback()
+			continue
+		}
+
+		if err := tx.Commit(); err != nil {
+			slog.Warn("Failed to commit job deletion", "jobID", jobID, "error", err)
+		}
+	}
+
+	return nil
+}
+
 func (s Server) ProcessJob(ctx context.Context, jobID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

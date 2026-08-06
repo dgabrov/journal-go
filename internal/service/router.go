@@ -36,6 +36,7 @@ func SetupRouter(config *data.ConfigData, db *sql.DB, jobEventChan chan int) *ht
 	mux.Handle(fullUrlWithMethod("POST", context, "/job"), controller.NewPostJobHandler(config, db, jobEventChan))
 	mux.Handle(fullUrlWithMethod("GET", context, "/job"), controller.NewGetJobHandler(config, db))
 	mux.Handle(fullUrlWithMethod("GET", context, "/job/download"), controller.NewGetJobDownloadHandler(config, db))
+	mux.Handle(fullUrlWithMethod("DELETE", context, "/job"), controller.NewDeleteJobHandler(config, db))
 
 	return mux
 }

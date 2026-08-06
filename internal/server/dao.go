@@ -920,3 +920,60 @@ func (s Server) jobIsCompletedQuery(ctx context.Context, tx *sql.Tx, jobID strin
 	}
 	return status == "completed", nil
 }
+
+func (s Server) validateJobsExistQuery(ctx context.Context, tx *sql.Tx, jobIDs []string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	placeholders := strings.Repeat("?,", len(jobIDs)-1) + "?"
+	args := make([]any, len(jobIDs))
+	for i, id := range jobIDs {
+		args[i] = id
+	}
+
+	query := `SELECT COUNT(*) FROM job WHERE job_id IN (` + placeholders + `)`
+	var count int
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count != len(jobIDs) {
+		return errors.New("some jobs do not exist")
+	}
+
+	return nil
+}
+
+func (s Server) validateJobsBelongToUserQuery(ctx context.Context, tx *sql.Tx, jobIDs []string, userID string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	placeholders := strings.Repeat("?,", len(jobIDs)-1) + "?"
+	args := make([]any, len(jobIDs))
+	for i, id := range jobIDs {
+		args[i] = id
+	}
+
+	query := `SELECT COUNT(*) FROM job WHERE job_id IN (` + placeholders + `) AND user_id = ?`
+	args = append(args, userID)
+
+	var count int
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count != len(jobIDs) {
+		return errors.New("some jobs do not belong to the user")
+	}
+
+	return nil
+}
+
+func (s Server) deleteJobQuery(ctx context.Context, tx *sql.Tx, jobID string) error {
+	_, err := tx.ExecContext(ctx, "DELETE FROM job WHERE job_id = ?", jobID)
+	return err
+}
