@@ -28,7 +28,7 @@ func Start() error {
 	}
 	defer db.Close()
 
-	job.StartJob(config, db, jobEventChan)
+	go job.StartJob(config, db, jobEventChan)
 
 	// Start HTTP server
 	router := SetupRouter(config, db, jobEventChan)
