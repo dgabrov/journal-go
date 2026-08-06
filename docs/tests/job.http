@@ -1,0 +1,13 @@
+###
+POST http://localhost:3001/journalserv/job
+Content-Type: application/json
+
+{
+  "journalItemId": "019fa074-9e44-72ae-a993-12729962871e"
+}
+
+### get jobs
+GET http://localhost:3001/journalserv/job
+
+### get jobs
+DELETE http://localhost:3001/journalserv/job?id=019fd7ab-f138-7220-a76b-aab72d9abf85

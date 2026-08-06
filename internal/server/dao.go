@@ -697,3 +697,283 @@ func (s Server) swapAttachmentDimensions(ctx context.Context, tx *sql.Tx, attach
 	_, err = tx.ExecContext(ctx, "UPDATE attachment SET width = ?, height = ? WHERE attachment_id = ?", height, width, attachmentID)
 	return err
 }
+
+func (s Server) validateJournalItemExistenceAndAccess(ctx context.Context, tx *sql.Tx, userID string, journalItemID string) error {
+	query := `
+		SELECT COUNT(*) FROM journal_item ji
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE ji.journal_item_id = ?
+		AND uj.user_id = ?
+	`
+
+	var count int
+	err := tx.QueryRowContext(ctx, query, journalItemID, userID).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("journal item not found or user does not have access")
+	}
+
+	return nil
+}
+
+func (s Server) validateAttachmentExistence(ctx context.Context, tx *sql.Tx, journalItemID string) error {
+	query := `
+		SELECT COUNT(*) FROM attachment
+		WHERE journal_item_id = ?
+	`
+
+	var count int
+	err := tx.QueryRowContext(ctx, query, journalItemID).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("no attachments found for this journal item")
+	}
+
+	return nil
+}
+
+func (s Server) getJournalTitleAndItemCreatedDt(ctx context.Context, tx *sql.Tx, journalItemID string) (string, time.Time, error) {
+	query := `
+		SELECT j.title, ji.created_dt
+		FROM journal_item ji
+		JOIN journal j ON ji.journal_id = j.journal_id
+		WHERE ji.journal_item_id = ?
+	`
+
+	var title string
+	var createdDt time.Time
+
+	err := tx.QueryRowContext(ctx, query, journalItemID).Scan(&title, &createdDt)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return title, createdDt, nil
+}
+
+func (s Server) createJobEntry(ctx context.Context, tx *sql.Tx, userID string, journalItemID string, journalTitle string, itemCreatedDt time.Time, now time.Time) error {
+	jobID := uuid.Must(uuid.NewV7()).String()
+	formattedDt := itemCreatedDt.Format("2006-01-02")
+	jobName := journalTitle + "_" + formattedDt
+
+	_, err := tx.ExecContext(ctx,
+		"INSERT INTO job (job_id, name, user_id, journal_item_id, status, create_dt) VALUES (?, ?, ?, ?, ?, ?)",
+		jobID, jobName, userID, journalItemID, "pending", now,
+	)
+
+	return err
+}
+
+type JobRecord struct {
+	ID            string
+	Name          string
+	JournalItemID string
+	Status        string
+	CreateDt      time.Time
+}
+
+type AttachmentRecord struct {
+	ID          string
+	ContentType string
+}
+
+func (s Server) getJobRecord(ctx context.Context, tx *sql.Tx, jobID string) (*JobRecord, error) {
+	query := `
+		SELECT job_id, name, journal_item_id, status, create_dt
+		FROM job
+		WHERE job_id = ?
+	`
+
+	var record JobRecord
+	err := tx.QueryRowContext(ctx, query, jobID).Scan(
+		&record.ID, &record.Name, &record.JournalItemID, &record.Status, &record.CreateDt,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.New("job not found")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &record, nil
+}
+
+func (s Server) getAttachmentsForJournalItem(ctx context.Context, tx *sql.Tx, journalItemID string) ([]AttachmentRecord, error) {
+	query := `
+		SELECT attachment_id, content_type
+		FROM attachment
+		WHERE journal_item_id = ?
+	`
+
+	rows, err := tx.QueryContext(ctx, query, journalItemID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var attachments []AttachmentRecord
+	for rows.Next() {
+		var attachment AttachmentRecord
+		if err := rows.Scan(&attachment.ID, &attachment.ContentType); err != nil {
+			return nil, err
+		}
+		attachments = append(attachments, attachment)
+	}
+
+	return attachments, rows.Err()
+}
+
+func (s Server) updateJobStatus(ctx context.Context, tx *sql.Tx, jobID string, status string) error {
+	_, err := tx.ExecContext(ctx,
+		"UPDATE job SET status = ? WHERE job_id = ?",
+		status, jobID,
+	)
+	return err
+}
+
+func (s Server) getPendingJobsQuery(ctx context.Context, tx *sql.Tx) ([]string, error) {
+	query := `
+		SELECT job_id
+		FROM job
+		WHERE status = 'pending'
+		ORDER BY create_dt ASC
+	`
+
+	rows, err := tx.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var jobIDs []string
+	for rows.Next() {
+		var jobID string
+		if err := rows.Scan(&jobID); err != nil {
+			return nil, err
+		}
+		jobIDs = append(jobIDs, jobID)
+	}
+
+	return jobIDs, rows.Err()
+}
+
+func (s Server) getUserJobsQuery(ctx context.Context, tx *sql.Tx, userID string) ([]data.Job, error) {
+	query := `
+		SELECT job_id, name, status, user_id, journal_item_id, create_dt
+		FROM job
+		WHERE user_id = ?
+		ORDER BY create_dt DESC
+	`
+
+	rows, err := tx.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	jobs := make([]data.Job, 0)
+	for rows.Next() {
+		var job data.Job
+		if err := rows.Scan(&job.ID, &job.Name, &job.Status, &job.UserID, &job.JournalItemID, &job.CreatedDt); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job)
+	}
+
+	return jobs, rows.Err()
+}
+
+func (s Server) jobExistsQuery(ctx context.Context, tx *sql.Tx, jobID string) (bool, error) {
+	var count int
+	err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM job WHERE job_id = ?", jobID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s Server) jobBelongsToUserQuery(ctx context.Context, tx *sql.Tx, jobID string, userID string) (bool, error) {
+	var count int
+	err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM job WHERE job_id = ? AND user_id = ?", jobID, userID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s Server) jobIsCompletedQuery(ctx context.Context, tx *sql.Tx, jobID string) (bool, error) {
+	var status string
+	err := tx.QueryRowContext(ctx, "SELECT status FROM job WHERE job_id = ?", jobID).Scan(&status)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return status == "completed", nil
+}
+
+func (s Server) validateJobsExistQuery(ctx context.Context, tx *sql.Tx, jobIDs []string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	placeholders := strings.Repeat("?,", len(jobIDs)-1) + "?"
+	args := make([]any, len(jobIDs))
+	for i, id := range jobIDs {
+		args[i] = id
+	}
+
+	query := `SELECT COUNT(*) FROM job WHERE job_id IN (` + placeholders + `)`
+	var count int
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count != len(jobIDs) {
+		return errors.New("some jobs do not exist")
+	}
+
+	return nil
+}
+
+func (s Server) validateJobsBelongToUserQuery(ctx context.Context, tx *sql.Tx, jobIDs []string, userID string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	placeholders := strings.Repeat("?,", len(jobIDs)-1) + "?"
+	args := make([]any, len(jobIDs))
+	for i, id := range jobIDs {
+		args[i] = id
+	}
+
+	query := `SELECT COUNT(*) FROM job WHERE job_id IN (` + placeholders + `) AND user_id = ?`
+	args = append(args, userID)
+
+	var count int
+	err := tx.QueryRowContext(ctx, query, args...).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count != len(jobIDs) {
+		return errors.New("some jobs do not belong to the user")
+	}
+
+	return nil
+}
+
+func (s Server) deleteJobQuery(ctx context.Context, tx *sql.Tx, jobID string) error {
+	_, err := tx.ExecContext(ctx, "DELETE FROM job WHERE job_id = ?", jobID)
+	return err
+}

@@ -8,7 +8,7 @@ import (
 	"github.com/amanagement24/journal-go/internal/data"
 )
 
-func SetupRouter(config *data.ConfigData, db *sql.DB) *http.ServeMux {
+func SetupRouter(config *data.ConfigData, db *sql.DB, jobEventChan chan int) *http.ServeMux {
 	mux := http.NewServeMux()
 	context := config.Context
 
@@ -33,6 +33,10 @@ func SetupRouter(config *data.ConfigData, db *sql.DB) *http.ServeMux {
 	mux.Handle(fullUrlWithMethod("POST", context, "/updateAttachment"), controller.NewPostUpdateAttachmentHandler(config, db))
 	mux.Handle(fullUrlWithMethod("POST", context, "/updateAttachmentTitles"), controller.NewPostUpdateAttachmentTitlesHandler(config, db))
 	mux.Handle(fullUrlWithMethod("PUT", context, "/rotate"), controller.NewPutRotateHandler(config, db))
+	mux.Handle(fullUrlWithMethod("POST", context, "/job"), controller.NewPostJobHandler(config, db, jobEventChan))
+	mux.Handle(fullUrlWithMethod("GET", context, "/job"), controller.NewGetJobHandler(config, db))
+	mux.Handle(fullUrlWithMethod("GET", context, "/job/download"), controller.NewGetJobDownloadHandler(config, db))
+	mux.Handle(fullUrlWithMethod("DELETE", context, "/job"), controller.NewDeleteJobHandler(config, db))
 
 	return mux
 }

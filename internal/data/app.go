@@ -95,3 +95,16 @@ type JournalUpdateData struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 }
+
+type JournalItemHolder struct {
+	JournalItemID string `json:"journalItemId"`
+}
+
+type Job struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Status        string    `json:"status"`
+	UserID        string    `json:"userId"`
+	JournalItemID string    `json:"journalItemId"`
+	CreatedDt     time.Time `json:"createdDt"`
+}

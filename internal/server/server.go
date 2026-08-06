@@ -1,12 +1,18 @@
 package server
 
 import (
+	"archive/zip"
 	"context"
 	"database/sql"
 	"errors"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/amanagement24/journal-go/internal/data"
+	"github.com/amanagement24/journal-go/internal/util"
 	"github.com/google/uuid"
 )
 
@@ -608,4 +614,304 @@ func (s Server) SwapAttachmentDimensions(ctx context.Context, attachmentID strin
 	}
 
 	return tx.Commit()
+}
+
+func (s Server) CreateJob(ctx context.Context, userID string, journalItemID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.validateJournalItemExistenceAndAccess(ctx, tx, userID, journalItemID); err != nil {
+		return err
+	}
+
+	if err := s.validateAttachmentExistence(ctx, tx, journalItemID); err != nil {
+		return err
+	}
+
+	journalTitle, itemCreatedDt, err := s.getJournalTitleAndItemCreatedDt(ctx, tx, journalItemID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	if err := s.createJobEntry(ctx, tx, userID, journalItemID, journalTitle, itemCreatedDt, now); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) GetPendingJobs(ctx context.Context) ([]string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	jobIDs, err := s.getPendingJobsQuery(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	return jobIDs, tx.Commit()
+}
+
+func (s Server) GetUserJobs(ctx context.Context, userID string) ([]data.Job, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	jobs, err := s.getUserJobsQuery(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return jobs, tx.Commit()
+}
+
+func (s Server) JobExists(ctx context.Context, jobID string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	exists, err := s.jobExistsQuery(ctx, tx, jobID)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, tx.Commit()
+}
+
+func (s Server) JobBelongsToUser(ctx context.Context, jobID string, userID string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	belongs, err := s.jobBelongsToUserQuery(ctx, tx, jobID, userID)
+	if err != nil {
+		return false, err
+	}
+
+	return belongs, tx.Commit()
+}
+
+func (s Server) JobIsCompleted(ctx context.Context, jobID string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	isCompleted, err := s.jobIsCompletedQuery(ctx, tx, jobID)
+	if err != nil {
+		return false, err
+	}
+
+	return isCompleted, tx.Commit()
+}
+
+func (s Server) ValidateJobsExist(ctx context.Context, jobIDs []string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.validateJobsExistQuery(ctx, tx, jobIDs); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) ValidateJobsBelongToUser(ctx context.Context, jobIDs []string, userID string) error {
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.validateJobsBelongToUserQuery(ctx, tx, jobIDs, userID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (s Server) DeleteJobs(ctx context.Context, jobIDs []string, config *data.ConfigData) error {
+	for _, jobID := range jobIDs {
+		jobFilePath := filepath.Join(config.Files.JobFolder, jobID+".zip")
+		if err := os.Remove(jobFilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.Warn("Failed to delete job file", "jobID", jobID, "error", err)
+		}
+
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			slog.Warn("Failed to delete job from database", "jobID", jobID, "error", err)
+			continue
+		}
+
+		if err := s.deleteJobQuery(ctx, tx, jobID); err != nil {
+			slog.Warn("Failed to delete job record", "jobID", jobID, "error", err)
+			tx.Rollback()
+			continue
+		}
+
+		if err := tx.Commit(); err != nil {
+			slog.Warn("Failed to commit job deletion", "jobID", jobID, "error", err)
+		}
+	}
+
+	return nil
+}
+
+func (s Server) ProcessJob(ctx context.Context, jobID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	jobRecord, err := s.getJobRecord(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+
+	if jobRecord.Status != "pending" {
+		slog.Warn("Job status is not pending", "jobID", jobID, "status", jobRecord.Status)
+		return tx.Commit()
+	}
+
+	attachments, err := s.getAttachmentsForJournalItem(ctx, tx, jobRecord.JournalItemID)
+	if err != nil {
+		return err
+	}
+
+	if len(attachments) == 0 {
+		if err := s.updateJobStatus(ctx, tx, jobID, "error"); err != nil {
+			return err
+		}
+		slog.Warn("No attachments found for job", "jobID", jobID)
+		return tx.Commit()
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	tempDir := os.TempDir()
+	guid := uuid.Must(uuid.NewV7()).String()
+	jobTempDir := filepath.Join(tempDir, "job_"+guid)
+
+	if err := os.MkdirAll(jobTempDir, 0755); err != nil {
+		return err
+	}
+	defer os.RemoveAll(jobTempDir)
+
+	for _, attachment := range attachments {
+		sourceFile := filepath.Join(s.config.Files.RegularFolder, attachment.ID+".dat")
+		ext := util.GetExtensionFromContentType(attachment.ContentType)
+		destFile := filepath.Join(jobTempDir, attachment.ID+ext)
+
+		if err := s.copyFile(sourceFile, destFile); err != nil {
+			return err
+		}
+	}
+
+	zipPath := filepath.Join(s.config.Files.JobFolder, jobID+".zip")
+	if err := s.zipDirectory(jobTempDir, zipPath); err != nil {
+		return err
+	}
+
+	completeTx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer completeTx.Rollback()
+
+	if err := s.updateJobStatus(ctx, completeTx, jobID, "completed"); err != nil {
+		return err
+	}
+
+	return completeTx.Commit()
+}
+
+func (s Server) copyFile(src string, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return err
+	}
+
+	return dstFile.Sync()
+}
+
+func (s Server) zipDirectory(sourceDir string, zipPath string) error {
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		return err
+	}
+	defer zipFile.Close()
+
+	zw := zip.NewWriter(zipFile)
+	defer zw.Close()
+
+	return filepath.Walk(sourceDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		relPath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+
+		zf, err := zw.Create(relPath)
+		if err != nil {
+			return err
+		}
+
+		if _, err := io.Copy(zf, file); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }

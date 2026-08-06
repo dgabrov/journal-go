@@ -18,6 +18,7 @@ type DBConfig struct {
 type FilesConfig struct {
 	SmallFolder   string `json:"smallFolder"`
 	RegularFolder string `json:"regularFolder"`
+	JobFolder     string `json:"jobFolder"`
 	Dimension     int    `json:"dimension"`
 }
 
@@ -68,6 +69,7 @@ func LoadConfig() (*ConfigData, error) {
 	slog.Info("Files configuration",
 		"small_folder", config.Files.SmallFolder,
 		"regular_folder", config.Files.RegularFolder,
+		"job_folder", config.Files.JobFolder,
 		"dimension", config.Files.Dimension,
 	)
 
