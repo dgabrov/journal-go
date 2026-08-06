@@ -609,3 +609,31 @@ func (s Server) SwapAttachmentDimensions(ctx context.Context, attachmentID strin
 
 	return tx.Commit()
 }
+
+func (s Server) CreateJob(ctx context.Context, userID string, journalItemID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.validateJournalItemExistenceAndAccess(ctx, tx, userID, journalItemID); err != nil {
+		return err
+	}
+
+	if err := s.validateAttachmentExistence(ctx, tx, journalItemID); err != nil {
+		return err
+	}
+
+	journalTitle, itemCreatedDt, err := s.getJournalTitleAndItemCreatedDt(ctx, tx, journalItemID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	if err := s.createJobEntry(ctx, tx, journalItemID, journalTitle, itemCreatedDt, now); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}

@@ -697,3 +697,75 @@ func (s Server) swapAttachmentDimensions(ctx context.Context, tx *sql.Tx, attach
 	_, err = tx.ExecContext(ctx, "UPDATE attachment SET width = ?, height = ? WHERE attachment_id = ?", height, width, attachmentID)
 	return err
 }
+
+func (s Server) validateJournalItemExistenceAndAccess(ctx context.Context, tx *sql.Tx, userID string, journalItemID string) error {
+	query := `
+		SELECT COUNT(*) FROM journal_item ji
+		JOIN user_journal uj ON ji.journal_id = uj.journal_id
+		WHERE ji.journal_item_id = ?
+		AND uj.user_id = ?
+	`
+
+	var count int
+	err := tx.QueryRowContext(ctx, query, journalItemID, userID).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("journal item not found or user does not have access")
+	}
+
+	return nil
+}
+
+func (s Server) validateAttachmentExistence(ctx context.Context, tx *sql.Tx, journalItemID string) error {
+	query := `
+		SELECT COUNT(*) FROM attachment
+		WHERE journal_item_id = ?
+	`
+
+	var count int
+	err := tx.QueryRowContext(ctx, query, journalItemID).Scan(&count)
+	if err != nil {
+		return err
+	}
+
+	if count == 0 {
+		return errors.New("no attachments found for this journal item")
+	}
+
+	return nil
+}
+
+func (s Server) getJournalTitleAndItemCreatedDt(ctx context.Context, tx *sql.Tx, journalItemID string) (string, time.Time, error) {
+	query := `
+		SELECT j.title, ji.created_dt
+		FROM journal_item ji
+		JOIN journal j ON ji.journal_id = j.journal_id
+		WHERE ji.journal_item_id = ?
+	`
+
+	var title string
+	var createdDt time.Time
+
+	err := tx.QueryRowContext(ctx, query, journalItemID).Scan(&title, &createdDt)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return title, createdDt, nil
+}
+
+func (s Server) createJobEntry(ctx context.Context, tx *sql.Tx, journalItemID string, journalTitle string, itemCreatedDt time.Time, now time.Time) error {
+	jobID := uuid.Must(uuid.NewV7()).String()
+	formattedDt := itemCreatedDt.Format("2006-01-02")
+	jobName := journalTitle + "_" + formattedDt
+
+	_, err := tx.ExecContext(ctx,
+		"INSERT INTO job (job_id, name, journal_item_id, status, create_dt) VALUES (?, ?, ?, ?, ?)",
+		jobID, jobName, journalItemID, "pending", now,
+	)
+
+	return err
+}

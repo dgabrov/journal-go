@@ -95,3 +95,7 @@ type JournalUpdateData struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
 }
+
+type JournalItemHolder struct {
+	JournalItemID string `json:"journalItemId"`
+}
