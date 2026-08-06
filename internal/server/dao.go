@@ -890,3 +890,33 @@ func (s Server) getUserJobsQuery(ctx context.Context, tx *sql.Tx, userID string)
 
 	return jobs, rows.Err()
 }
+
+func (s Server) jobExistsQuery(ctx context.Context, tx *sql.Tx, jobID string) (bool, error) {
+	var count int
+	err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM job WHERE job_id = ?", jobID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s Server) jobBelongsToUserQuery(ctx context.Context, tx *sql.Tx, jobID string, userID string) (bool, error) {
+	var count int
+	err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM job WHERE job_id = ? AND user_id = ?", jobID, userID).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func (s Server) jobIsCompletedQuery(ctx context.Context, tx *sql.Tx, jobID string) (bool, error) {
+	var status string
+	err := tx.QueryRowContext(ctx, "SELECT status FROM job WHERE job_id = ?", jobID).Scan(&status)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return status == "completed", nil
+}

@@ -674,6 +674,51 @@ func (s Server) GetUserJobs(ctx context.Context, userID string) ([]data.Job, err
 	return jobs, tx.Commit()
 }
 
+func (s Server) JobExists(ctx context.Context, jobID string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	exists, err := s.jobExistsQuery(ctx, tx, jobID)
+	if err != nil {
+		return false, err
+	}
+
+	return exists, tx.Commit()
+}
+
+func (s Server) JobBelongsToUser(ctx context.Context, jobID string, userID string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	belongs, err := s.jobBelongsToUserQuery(ctx, tx, jobID, userID)
+	if err != nil {
+		return false, err
+	}
+
+	return belongs, tx.Commit()
+}
+
+func (s Server) JobIsCompleted(ctx context.Context, jobID string) (bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	isCompleted, err := s.jobIsCompletedQuery(ctx, tx, jobID)
+	if err != nil {
+		return false, err
+	}
+
+	return isCompleted, tx.Commit()
+}
+
 func (s Server) ProcessJob(ctx context.Context, jobID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
