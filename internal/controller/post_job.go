@@ -10,14 +10,16 @@ import (
 )
 
 type PostJobHandler struct {
-	Config *data.ConfigData
-	DB     *sql.DB
+	Config       *data.ConfigData
+	DB           *sql.DB
+	JobEventChan chan int
 }
 
-func NewPostJobHandler(config *data.ConfigData, db *sql.DB) *PostJobHandler {
+func NewPostJobHandler(config *data.ConfigData, db *sql.DB, jobEventChan chan int) *PostJobHandler {
 	return &PostJobHandler{
-		Config: config,
-		DB:     db,
+		Config:       config,
+		DB:           db,
+		JobEventChan: jobEventChan,
 	}
 }
 
@@ -50,5 +52,12 @@ func (h *PostJobHandler) process(ctx context.Context, r *http.Request, holder da
 		return err
 	}
 
-	return servr.CreateJob(ctx, userID, holder.JournalItemID)
+	err = servr.CreateJob(ctx, userID, holder.JournalItemID)
+	if err != nil {
+		return err
+	}
+
+	h.JobEventChan <- 1
+
+	return nil
 }

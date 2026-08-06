@@ -13,6 +13,7 @@
   "files": {
     "smallFolder": "/home/daniel/IdeaProjects/journal-go/docs/files/small",
     "regularFolder": "/home/daniel/IdeaProjects/journal-go/docs/files/regular",
+    "jobFolder": "/home/daniel/IdeaProjects/journal-go/docs/files/job",
     "dimension": 150
   }
 }

@@ -5,11 +5,14 @@ import (
 	"net/http"
 
 	"github.com/amanagement24/journal-go/internal/data"
+	"github.com/amanagement24/journal-go/internal/job"
 
 	_ "github.com/go-sql-driver/mysql"
 )
 
 func Start() error {
+	jobEventChan := make(chan int, 1000)
+
 	// Load configuration
 	config, err := data.LoadConfig()
 	if err != nil {
@@ -25,8 +28,10 @@ func Start() error {
 	}
 	defer db.Close()
 
+	job.StartJob(config, db, jobEventChan)
+
 	// Start HTTP server
-	router := SetupRouter(config, db)
+	router := SetupRouter(config, db, jobEventChan)
 	server := &http.Server{
 		Addr:    config.ServerAddress,
 		Handler: router,

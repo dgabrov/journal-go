@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/amanagement24/journal-go/internal/service"
 	"log/slog"
 	"os"
+
+	"github.com/amanagement24/journal-go/internal/service"
 )
 
 func main() {
