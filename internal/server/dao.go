@@ -864,3 +864,29 @@ func (s Server) getPendingJobsQuery(ctx context.Context, tx *sql.Tx) ([]string, 
 
 	return jobIDs, rows.Err()
 }
+
+func (s Server) getUserJobsQuery(ctx context.Context, tx *sql.Tx, userID string) ([]data.Job, error) {
+	query := `
+		SELECT job_id, name, status, user_id, journal_item_id, create_dt
+		FROM job
+		WHERE user_id = ?
+		ORDER BY create_dt DESC
+	`
+
+	rows, err := tx.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	jobs := make([]data.Job, 0)
+	for rows.Next() {
+		var job data.Job
+		if err := rows.Scan(&job.ID, &job.Name, &job.Status, &job.UserID, &job.JournalItemID, &job.CreatedDt); err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, job)
+	}
+
+	return jobs, rows.Err()
+}

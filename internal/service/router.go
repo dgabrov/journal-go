@@ -34,6 +34,7 @@ func SetupRouter(config *data.ConfigData, db *sql.DB, jobEventChan chan int) *ht
 	mux.Handle(fullUrlWithMethod("POST", context, "/updateAttachmentTitles"), controller.NewPostUpdateAttachmentTitlesHandler(config, db))
 	mux.Handle(fullUrlWithMethod("PUT", context, "/rotate"), controller.NewPutRotateHandler(config, db))
 	mux.Handle(fullUrlWithMethod("POST", context, "/job"), controller.NewPostJobHandler(config, db, jobEventChan))
+	mux.Handle(fullUrlWithMethod("GET", context, "/job"), controller.NewGetJobHandler(config, db))
 
 	return mux
 }

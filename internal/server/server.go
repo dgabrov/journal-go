@@ -659,6 +659,21 @@ func (s Server) GetPendingJobs(ctx context.Context) ([]string, error) {
 	return jobIDs, tx.Commit()
 }
 
+func (s Server) GetUserJobs(ctx context.Context, userID string) ([]data.Job, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	jobs, err := s.getUserJobsQuery(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return jobs, tx.Commit()
+}
+
 func (s Server) ProcessJob(ctx context.Context, jobID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
